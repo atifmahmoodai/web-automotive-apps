@@ -1,0 +1,83 @@
+{
+  "title": "Auto Parts Sales & Inventory",
+  "description": "Monitor parts stock, purchase cost, sales value and replenishment status.",
+  "plural": "Parts",
+  "singular": "Part",
+  "statuses": [
+    "In stock",
+    "Low stock",
+    "On order",
+    "Backorder"
+  ],
+  "fields": [
+    {
+      "key": "entity",
+      "label": "Part number",
+      "type": "text"
+    },
+    {
+      "key": "detail",
+      "label": "Part",
+      "type": "text"
+    },
+    {
+      "key": "group",
+      "label": "Supplier",
+      "type": "text"
+    }
+  ],
+  "valueLabel": "stock value",
+  "closed": [],
+  "attention": "Backorder",
+  "prefix": "P",
+  "seed": [
+    {
+      "name": "Toyota Corolla",
+      "status": "In stock",
+      "owner": "Sam",
+      "date": "2026-09-30",
+      "value": 125000,
+      "notes": "Fictional sample entry",
+      "ref": "AST-0001",
+      "entity": "Priority account",
+      "detail": "Quarterly review",
+      "group": "Karachi"
+    },
+    {
+      "name": "Honda Civic",
+      "status": "Low stock",
+      "owner": "Amina",
+      "date": "2026-09-25",
+      "value": 89000,
+      "notes": "Fictional sample entry",
+      "ref": "AST-0002",
+      "entity": "Priority account",
+      "detail": "Quarterly review",
+      "group": "Karachi"
+    },
+    {
+      "name": "Suzuki Swift",
+      "status": "On order",
+      "owner": "Bilal",
+      "date": "2026-09-20",
+      "value": 210000,
+      "notes": "Fictional sample entry",
+      "ref": "AST-0003",
+      "entity": "Priority account",
+      "detail": "Quarterly review",
+      "group": "Karachi"
+    },
+    {
+      "name": "Kia Sportage",
+      "status": "Backorder",
+      "owner": "Nora",
+      "date": "2026-09-15",
+      "value": 67500,
+      "notes": "Fictional sample entry",
+      "ref": "AST-0004",
+      "entity": "Priority account",
+      "detail": "Quarterly review",
+      "group": "Karachi"
+    }
+  ]
+}

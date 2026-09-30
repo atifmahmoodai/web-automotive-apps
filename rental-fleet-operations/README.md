@@ -1,13 +1,13 @@
 # Rental Fleet Operations Workspace
 
-**Status:** Planned — folder only; no application code yet.
+Track vehicle readiness, utilization, open rentals and operating costs.
 
-## Intended purpose
+This is an offline, browser-based working demo. It includes fictional starter records, add/edit/delete, status and text filters, summary cards, and CSV export. Data stays in this browser's local storage. No accounts, cloud sync, external messages, payment processing or third-party connections are configured.
 
-Coordinate vehicles, driver applications, maintenance, contracts, payments and condition reports.
+## Run
 
-## Next step
+Open `index.html` in a recent browser, or serve this folder with `python -m http.server 8000` and open `http://localhost:8000`. No package installation is required.
 
-Define the detailed requirements and first release scope before implementation.
+## Project-specific workflow
 
-This project is a folder within the Astra repository. No separate Git repository is created.
+Record **Vehicle**, branch, and fleet manager; update the workflow status and due/activity date; track **asset value**; then export the current records as CSV. The sample amounts and records are fictional and intended for demonstration.

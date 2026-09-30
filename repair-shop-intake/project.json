@@ -1,0 +1,87 @@
+{
+  "title": "Repair Shop Intake & Signature Portal",
+  "description": "Record vehicle intake, customer-approved work and completion. Demo signatures are typed names only.",
+  "plural": "Repair orders",
+  "singular": "Repair order",
+  "statuses": [
+    "Checked in",
+    "Estimate",
+    "Approved",
+    "In repair",
+    "Ready",
+    "Collected"
+  ],
+  "fields": [
+    {
+      "key": "entity",
+      "label": "Customer",
+      "type": "text"
+    },
+    {
+      "key": "detail",
+      "label": "Vehicle",
+      "type": "text"
+    },
+    {
+      "key": "group",
+      "label": "Advisor",
+      "type": "text"
+    }
+  ],
+  "valueLabel": "approved estimate",
+  "closed": [
+    "Collected"
+  ],
+  "attention": "In repair",
+  "prefix": "RO",
+  "seed": [
+    {
+      "name": "Toyota Corolla",
+      "status": "Checked in",
+      "owner": "Sam",
+      "date": "2026-09-30",
+      "value": 125000,
+      "notes": "Fictional sample entry",
+      "ref": "AST-0001",
+      "entity": "Priority account",
+      "detail": "Quarterly review",
+      "group": "Karachi"
+    },
+    {
+      "name": "Honda Civic",
+      "status": "Estimate",
+      "owner": "Amina",
+      "date": "2026-09-25",
+      "value": 89000,
+      "notes": "Fictional sample entry",
+      "ref": "AST-0002",
+      "entity": "Priority account",
+      "detail": "Quarterly review",
+      "group": "Karachi"
+    },
+    {
+      "name": "Suzuki Swift",
+      "status": "Approved",
+      "owner": "Bilal",
+      "date": "2026-09-20",
+      "value": 210000,
+      "notes": "Fictional sample entry",
+      "ref": "AST-0003",
+      "entity": "Priority account",
+      "detail": "Quarterly review",
+      "group": "Karachi"
+    },
+    {
+      "name": "Kia Sportage",
+      "status": "In repair",
+      "owner": "Nora",
+      "date": "2026-09-15",
+      "value": 67500,
+      "notes": "Fictional sample entry",
+      "ref": "AST-0004",
+      "entity": "Priority account",
+      "detail": "Quarterly review",
+      "group": "Karachi"
+    }
+  ]
+}

@@ -1,6 +1,6 @@
-# Car Rental Booking & Fleet Administration
+# Fleet Operations & Outstanding-Payments Report
 
-Track reservations, fleet availability, checkout and returns for a rental desk.
+Review fleet activity, customer balances and payment collection status.
 
 This is an offline, browser-based working demo. It includes fictional starter records, add/edit/delete, status and text filters, summary cards, and CSV export. Data stays in this browser's local storage. No accounts, cloud sync, external messages, payment processing or third-party connections are configured.
 
@@ -10,4 +10,4 @@ Open `index.html` in a recent browser, or serve this folder with `python -m http
 
 ## Project-specific workflow
 
-Record **Customer**, vehicle, and branch; update the workflow status and due/activity date; track **rental total**; then export the current records as CSV. The sample amounts and records are fictional and intended for demonstration.
+Record **Customer**, vehicle / route, and account owner; update the workflow status and due/activity date; track **outstanding balance**; then export the current records as CSV. The sample amounts and records are fictional and intended for demonstration.

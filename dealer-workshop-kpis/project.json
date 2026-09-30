@@ -1,0 +1,85 @@
+{
+  "title": "Combined Dealership & Workshop KPI System",
+  "description": "Combine vehicle sales, service throughput and workshop profitability indicators.",
+  "plural": "KPI records",
+  "singular": "KPI record",
+  "statuses": [
+    "On track",
+    "Watch",
+    "Action needed",
+    "Complete"
+  ],
+  "fields": [
+    {
+      "key": "entity",
+      "label": "Department",
+      "type": "text"
+    },
+    {
+      "key": "detail",
+      "label": "KPI",
+      "type": "text"
+    },
+    {
+      "key": "group",
+      "label": "Owner",
+      "type": "text"
+    }
+  ],
+  "valueLabel": "KPI amount",
+  "closed": [
+    "Complete"
+  ],
+  "attention": "Action needed",
+  "prefix": "KR",
+  "seed": [
+    {
+      "name": "Northside account",
+      "status": "On track",
+      "owner": "Sam",
+      "date": "2026-09-30",
+      "value": 125000,
+      "notes": "Fictional sample entry",
+      "ref": "AST-0001",
+      "entity": "Priority account",
+      "detail": "Quarterly review",
+      "group": "Karachi"
+    },
+    {
+      "name": "Harbor account",
+      "status": "Watch",
+      "owner": "Amina",
+      "date": "2026-09-25",
+      "value": 89000,
+      "notes": "Fictional sample entry",
+      "ref": "AST-0002",
+      "entity": "Priority account",
+      "detail": "Quarterly review",
+      "group": "Karachi"
+    },
+    {
+      "name": "Central account",
+      "status": "Action needed",
+      "owner": "Bilal",
+      "date": "2026-09-20",
+      "value": 210000,
+      "notes": "Fictional sample entry",
+      "ref": "AST-0003",
+      "entity": "Priority account",
+      "detail": "Quarterly review",
+      "group": "Karachi"
+    },
+    {
+      "name": "West account",
+      "status": "Complete",
+      "owner": "Nora",
+      "date": "2026-09-15",
+      "value": 67500,
+      "notes": "Fictional sample entry",
+      "ref": "AST-0004",
+      "entity": "Priority account",
+      "detail": "Quarterly review",
+      "group": "Karachi"
+    }
+  ]
+}

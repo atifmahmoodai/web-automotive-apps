@@ -1,13 +1,13 @@
 # Automotive Lead Follow-up & Referrals
 
-**Status:** Planned — folder only; no application code yet.
+Organize enquiries, next contact dates, vehicle interest and referral source. Demo only; does not send WhatsApp/SMS.
 
-## Intended purpose
+This is an offline, browser-based working demo. It includes fictional starter records, add/edit/delete, status and text filters, summary cards, and CSV export. Data stays in this browser's local storage. No accounts, cloud sync, external messages, payment processing or third-party connections are configured.
 
-Capture and qualify enquiries, track referrals, schedule appointments and hand leads to salespeople.
+## Run
 
-## Next step
+Open `index.html` in a recent browser, or serve this folder with `python -m http.server 8000` and open `http://localhost:8000`. No package installation is required.
 
-Define the detailed requirements and first release scope before implementation.
+## Project-specific workflow
 
-This project is a folder within the Astra repository. No separate Git repository is created.
+Record **Contact**, vehicle interest, and salesperson; update the workflow status and due/activity date; track **lead value**; then export the current records as CSV. The sample amounts and records are fictional and intended for demonstration.

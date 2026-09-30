@@ -1,0 +1,85 @@
+{
+  "title": "Dealership Finance & Forecast Dashboard",
+  "description": "Compare showroom sales, direct costs, margins and forecast targets.",
+  "plural": "Monthly results",
+  "singular": "Monthly result",
+  "statuses": [
+    "Actual",
+    "Forecast",
+    "At risk",
+    "Closed"
+  ],
+  "fields": [
+    {
+      "key": "entity",
+      "label": "Branch",
+      "type": "text"
+    },
+    {
+      "key": "detail",
+      "label": "Period",
+      "type": "text"
+    },
+    {
+      "key": "group",
+      "label": "Manager",
+      "type": "text"
+    }
+  ],
+  "valueLabel": "gross profit",
+  "closed": [
+    "Closed"
+  ],
+  "attention": "Closed",
+  "prefix": "MR",
+  "seed": [
+    {
+      "name": "Northside account",
+      "status": "Actual",
+      "owner": "Sam",
+      "date": "2026-09-30",
+      "value": 125000,
+      "notes": "Fictional sample entry",
+      "ref": "AST-0001",
+      "entity": "Priority account",
+      "detail": "Quarterly review",
+      "group": "Karachi"
+    },
+    {
+      "name": "Harbor account",
+      "status": "Forecast",
+      "owner": "Amina",
+      "date": "2026-09-25",
+      "value": 89000,
+      "notes": "Fictional sample entry",
+      "ref": "AST-0002",
+      "entity": "Priority account",
+      "detail": "Quarterly review",
+      "group": "Karachi"
+    },
+    {
+      "name": "Central account",
+      "status": "At risk",
+      "owner": "Bilal",
+      "date": "2026-09-20",
+      "value": 210000,
+      "notes": "Fictional sample entry",
+      "ref": "AST-0003",
+      "entity": "Priority account",
+      "detail": "Quarterly review",
+      "group": "Karachi"
+    },
+    {
+      "name": "West account",
+      "status": "Closed",
+      "owner": "Nora",
+      "date": "2026-09-15",
+      "value": 67500,
+      "notes": "Fictional sample entry",
+      "ref": "AST-0004",
+      "entity": "Priority account",
+      "detail": "Quarterly review",
+      "group": "Karachi"
+    }
+  ]
+}

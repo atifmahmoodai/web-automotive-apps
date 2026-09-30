@@ -1,0 +1,86 @@
+{
+  "title": "Vehicle Inspection Operations Dashboard",
+  "description": "Schedule inspections, capture condition grades and follow up repair recommendations.",
+  "plural": "Inspections",
+  "singular": "Inspection",
+  "statuses": [
+    "Booked",
+    "In progress",
+    "Needs repair",
+    "Passed",
+    "Released"
+  ],
+  "fields": [
+    {
+      "key": "entity",
+      "label": "Vehicle",
+      "type": "text"
+    },
+    {
+      "key": "detail",
+      "label": "Inspector",
+      "type": "text"
+    },
+    {
+      "key": "group",
+      "label": "Inspection type",
+      "type": "text"
+    }
+  ],
+  "valueLabel": "repair estimate",
+  "closed": [
+    "Released"
+  ],
+  "attention": "Needs repair",
+  "prefix": "I",
+  "seed": [
+    {
+      "name": "Toyota Corolla",
+      "status": "Booked",
+      "owner": "Sam",
+      "date": "2026-09-30",
+      "value": 125000,
+      "notes": "Fictional sample entry",
+      "ref": "AST-0001",
+      "entity": "Priority account",
+      "detail": "Quarterly review",
+      "group": "Karachi"
+    },
+    {
+      "name": "Honda Civic",
+      "status": "In progress",
+      "owner": "Amina",
+      "date": "2026-09-25",
+      "value": 89000,
+      "notes": "Fictional sample entry",
+      "ref": "AST-0002",
+      "entity": "Priority account",
+      "detail": "Quarterly review",
+      "group": "Karachi"
+    },
+    {
+      "name": "Suzuki Swift",
+      "status": "Needs repair",
+      "owner": "Bilal",
+      "date": "2026-09-20",
+      "value": 210000,
+      "notes": "Fictional sample entry",
+      "ref": "AST-0003",
+      "entity": "Priority account",
+      "detail": "Quarterly review",
+      "group": "Karachi"
+    },
+    {
+      "name": "Kia Sportage",
+      "status": "Passed",
+      "owner": "Nora",
+      "date": "2026-09-15",
+      "value": 67500,
+      "notes": "Fictional sample entry",
+      "ref": "AST-0004",
+      "entity": "Priority account",
+      "detail": "Quarterly review",
+      "group": "Karachi"
+    }
+  ]
+}

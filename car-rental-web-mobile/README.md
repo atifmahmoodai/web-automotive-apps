@@ -1,13 +1,13 @@
 # Car Rental Web & Mobile Platform
 
-**Status:** Planned — folder only; no application code yet.
+Demo of a customer booking flow with fleet schedule and reservation tracking.
 
-## Intended purpose
+This is an offline, browser-based working demo. It includes fictional starter records, add/edit/delete, status and text filters, summary cards, and CSV export. Data stays in this browser's local storage. No accounts, cloud sync, external messages, payment processing or third-party connections are configured.
 
-Organise a phased rental platform: web listings and reservations first, mobile applications later.
+## Run
 
-## Next step
+Open `index.html` in a recent browser, or serve this folder with `python -m http.server 8000` and open `http://localhost:8000`. No package installation is required.
 
-Define the detailed requirements and first release scope before implementation.
+## Project-specific workflow
 
-This project is a folder within the Astra repository. No separate Git repository is created.
+Record **Customer**, vehicle, and pickup location; update the workflow status and due/activity date; track **booking total**; then export the current records as CSV. The sample amounts and records are fictional and intended for demonstration.

@@ -1,13 +1,13 @@
 # Showroom Inventory Manager
 
-**Status:** Planned — folder only; no application code yet.
+Track each vehicle’s acquisition, preparation spend, asking price and sale status.
 
-## Intended purpose
+This is an offline, browser-based working demo. It includes fictional starter records, add/edit/delete, status and text filters, summary cards, and CSV export. Data stays in this browser's local storage. No accounts, cloud sync, external messages, payment processing or third-party connections are configured.
 
-Manage vehicle stock, availability, acquisition details, preparation costs and stock ageing.
+## Run
 
-## Next step
+Open `index.html` in a recent browser, or serve this folder with `python -m http.server 8000` and open `http://localhost:8000`. No package installation is required.
 
-Define the detailed requirements and first release scope before implementation.
+## Project-specific workflow
 
-This project is a folder within the Astra repository. No separate Git repository is created.
+Record **Stock number**, make and model, and branch; update the workflow status and due/activity date; track **asking price**; then export the current records as CSV. The sample amounts and records are fictional and intended for demonstration.

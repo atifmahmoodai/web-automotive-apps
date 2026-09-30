@@ -1,6 +1,6 @@
-# Car Rental Booking & Fleet Administration
+# Combined Dealership & Workshop KPI System
 
-Track reservations, fleet availability, checkout and returns for a rental desk.
+Combine vehicle sales, service throughput and workshop profitability indicators.
 
 This is an offline, browser-based working demo. It includes fictional starter records, add/edit/delete, status and text filters, summary cards, and CSV export. Data stays in this browser's local storage. No accounts, cloud sync, external messages, payment processing or third-party connections are configured.
 
@@ -10,4 +10,4 @@ Open `index.html` in a recent browser, or serve this folder with `python -m http
 
 ## Project-specific workflow
 
-Record **Customer**, vehicle, and branch; update the workflow status and due/activity date; track **rental total**; then export the current records as CSV. The sample amounts and records are fictional and intended for demonstration.
+Record **Department**, kpi, and owner; update the workflow status and due/activity date; track **KPI amount**; then export the current records as CSV. The sample amounts and records are fictional and intended for demonstration.

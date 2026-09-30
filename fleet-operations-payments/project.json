@@ -1,0 +1,86 @@
+{
+  "title": "Fleet Operations & Outstanding-Payments Report",
+  "description": "Review fleet activity, customer balances and payment collection status.",
+  "plural": "Accounts",
+  "singular": "Account",
+  "statuses": [
+    "Current",
+    "Part paid",
+    "Overdue",
+    "Paid",
+    "Disputed"
+  ],
+  "fields": [
+    {
+      "key": "entity",
+      "label": "Customer",
+      "type": "text"
+    },
+    {
+      "key": "detail",
+      "label": "Vehicle / route",
+      "type": "text"
+    },
+    {
+      "key": "group",
+      "label": "Account owner",
+      "type": "text"
+    }
+  ],
+  "valueLabel": "outstanding balance",
+  "closed": [
+    "Paid"
+  ],
+  "attention": "Overdue",
+  "prefix": "A",
+  "seed": [
+    {
+      "name": "Northside account",
+      "status": "Current",
+      "owner": "Sam",
+      "date": "2026-09-30",
+      "value": 125000,
+      "notes": "Fictional sample entry",
+      "ref": "AST-0001",
+      "entity": "Priority account",
+      "detail": "Quarterly review",
+      "group": "Karachi"
+    },
+    {
+      "name": "Harbor account",
+      "status": "Part paid",
+      "owner": "Amina",
+      "date": "2026-09-25",
+      "value": 89000,
+      "notes": "Fictional sample entry",
+      "ref": "AST-0002",
+      "entity": "Priority account",
+      "detail": "Quarterly review",
+      "group": "Karachi"
+    },
+    {
+      "name": "Central account",
+      "status": "Overdue",
+      "owner": "Bilal",
+      "date": "2026-09-20",
+      "value": 210000,
+      "notes": "Fictional sample entry",
+      "ref": "AST-0003",
+      "entity": "Priority account",
+      "detail": "Quarterly review",
+      "group": "Karachi"
+    },
+    {
+      "name": "West account",
+      "status": "Paid",
+      "owner": "Nora",
+      "date": "2026-09-15",
+      "value": 67500,
+      "notes": "Fictional sample entry",
+      "ref": "AST-0004",
+      "entity": "Priority account",
+      "detail": "Quarterly review",
+      "group": "Karachi"
+    }
+  ]
+}

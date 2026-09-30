@@ -1,0 +1,85 @@
+{
+  "title": "Showroom Inventory Manager",
+  "description": "Track each vehicle’s acquisition, preparation spend, asking price and sale status.",
+  "plural": "Vehicles",
+  "singular": "Vehicle",
+  "statuses": [
+    "In stock",
+    "Reserved",
+    "Sold",
+    "Under preparation"
+  ],
+  "fields": [
+    {
+      "key": "entity",
+      "label": "Stock number",
+      "type": "text"
+    },
+    {
+      "key": "detail",
+      "label": "Make and model",
+      "type": "text"
+    },
+    {
+      "key": "group",
+      "label": "Branch",
+      "type": "text"
+    }
+  ],
+  "valueLabel": "asking price",
+  "closed": [
+    "Sold"
+  ],
+  "attention": "Under preparation",
+  "prefix": "V",
+  "seed": [
+    {
+      "name": "Toyota Corolla",
+      "status": "In stock",
+      "owner": "Sam",
+      "date": "2026-09-30",
+      "value": 125000,
+      "notes": "Fictional sample entry",
+      "ref": "AST-0001",
+      "entity": "Priority account",
+      "detail": "Quarterly review",
+      "group": "Karachi"
+    },
+    {
+      "name": "Honda Civic",
+      "status": "Reserved",
+      "owner": "Amina",
+      "date": "2026-09-25",
+      "value": 89000,
+      "notes": "Fictional sample entry",
+      "ref": "AST-0002",
+      "entity": "Priority account",
+      "detail": "Quarterly review",
+      "group": "Karachi"
+    },
+    {
+      "name": "Suzuki Swift",
+      "status": "Sold",
+      "owner": "Bilal",
+      "date": "2026-09-20",
+      "value": 210000,
+      "notes": "Fictional sample entry",
+      "ref": "AST-0003",
+      "entity": "Priority account",
+      "detail": "Quarterly review",
+      "group": "Karachi"
+    },
+    {
+      "name": "Kia Sportage",
+      "status": "Under preparation",
+      "owner": "Nora",
+      "date": "2026-09-15",
+      "value": 67500,
+      "notes": "Fictional sample entry",
+      "ref": "AST-0004",
+      "entity": "Priority account",
+      "detail": "Quarterly review",
+      "group": "Karachi"
+    }
+  ]
+}
