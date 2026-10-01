@@ -3,7 +3,7 @@ from pathlib import Path
 import json, re, subprocess, sys, tempfile
 ROOT=Path(__file__).resolve().parents[1]
 projects=json.loads((ROOT/'scripts'/'catalog-manifest.json').read_text()) if (ROOT/'scripts'/'catalog-manifest.json').exists() else None
-folders=sorted([* (ROOT/'business-web-apps').glob('*/'), *(ROOT/'automotive').glob('*/')])
+folders=sorted(p for p in ROOT.glob('*/') if p.is_dir() and p.name!='scripts' and not p.name.startswith('.'))
 errors=[]
 for folder in folders:
     for name in ['README.md','index.html','project.json']:
@@ -21,7 +21,7 @@ for folder in folders:
                 result=subprocess.run(['node','--check',f.name],capture_output=True,text=True)
             if result.returncode: errors.append(f'{folder}: {result.stderr.strip()}')
     except Exception as exc: errors.append(f'{folder}: {exc}')
-if len(folders)!=34: errors.append(f'Expected 34 folders (15 business + 19 automotive), found {len(folders)}')
+if len(folders)!=19: errors.append(f'Expected 19 project folders, found {len(folders)}')
 print(f'Project folders: {len(folders)}')
 print(f'Validation failures: {len(errors)}')
 for error in errors: print(error)
