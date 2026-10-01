@@ -26,6 +26,8 @@ Nineteen self-contained browser demos for dealerships, workshops, car rental and
 
 Each folder contains a runnable browser demo (`index.html`), fictional seed data, record editing, search and status filters, and CSV export. Data stays in the local browser. These are demonstration prototypes, not deployed multi-user production systems.
 
+Related full applications: [soft-garage-workshop-manager](https://github.com/atifmahmoodai/soft-garage-workshop-manager) (garage and repair-shop management system) and [data-showroom-profitability-dashboard](https://github.com/atifmahmoodai/data-showroom-profitability-dashboard) (Power BI dashboard fed by the showroom app).
+
 The [soft-showroom-manager](https://github.com/atifmahmoodai/soft-showroom-manager) repository contains a more complete showroom operations app.
 
 ## Run
