@@ -1,0 +1,68 @@
+import assert from 'node:assert/strict';
+import {DatabaseSync} from 'node:sqlite';
+import {readFileSync,readdirSync} from 'node:fs';
+import {handle,type MobileBindings} from '../service/worker';
+import {purgeDueAccounts} from '../service/accounts';
+import {createMobileLink,hashLink} from '../../lib/mobile-link';
+const sqlite=new DatabaseSync(':memory:');sqlite.exec('PRAGMA foreign_keys=ON');
+for(const f of readdirSync('drizzle').filter(f=>f.endsWith('.sql')).sort())sqlite.exec(readFileSync('drizzle/'+f,'utf8').replaceAll('--> statement-breakpoint',''));
+class Statement{constructor(public sql:string,public values:unknown[]=[]){ }bind(...values:unknown[]){assert(!values.includes(undefined),'Undefined D1 binding');return new Statement(this.sql,values)}async first(){return sqlite.prepare(this.sql).get(...this.values as any[])||null}async all(){return {results:sqlite.prepare(this.sql).all(...this.values as any[]),success:true}}async run(){return {success:true,meta:sqlite.prepare(this.sql).run(...this.values as any[])}}}
+const db={prepare:(sql:string)=>new Statement(sql),async batch(steps:Statement[]){sqlite.exec('BEGIN');try{const out=[];for(const s of steps){if(/^\s*(SELECT|WITH)/i.test(s.sql))out.push(await s.all());else out.push(await s.run())}sqlite.exec('COMMIT');return out}catch(e){sqlite.exec('ROLLBACK');throw e}}};
+const files=new Map<string,{bytes:Uint8Array;type:string}>();
+const bucket={async put(key:string,bytes:Uint8Array,options:any){files.set(key,{bytes,type:options.httpMetadata.contentType})},async get(key:string,options:any){const f=files.get(key);return f?{body:options?.range?f.bytes.slice(options.range.offset,options.range.offset+options.range.length):f.bytes,size:f.bytes.length}:null},async delete(keys:string|string[]){for(const key of Array.isArray(keys)?keys:[keys])files.delete(key)}};
+(globalThis as any).__testEnv={DB:db,BUCKET:bucket};
+const config={issuer:'https://api-test.carbook.test/',audience:'https://mobile.carbook.test',clientId:'native-test',jwksUrl:'https://api-test.carbook.test/jwks'};
+const bindings={DB:db,BUCKET:bucket,OIDC_ISSUER:config.issuer,OIDC_AUDIENCE:config.audience,OIDC_CLIENT_ID:config.clientId,OIDC_JWKS_URL:config.jwksUrl,OWNER_SUBJECT:'owner-subject',ALLOWED_SUBJECTS:'pilot-1,pilot-2,pilot-3',REGISTRATION_OPEN:'false',CORS_ORIGINS:'https://allowed.carbook.test'} as unknown as MobileBindings;
+const pair=await crypto.subtle.generateKey({name:'RSASSA-PKCS1-v1_5',modulusLength:2048,publicExponent:new Uint8Array([1,0,1]),hash:'SHA-256'},true,['sign','verify']);
+const jwk={...await crypto.subtle.exportKey('jwk',pair.publicKey),kid:'api-test-key',alg:'RS256',use:'sig'},originalFetch=globalThis.fetch;
+globalThis.fetch=async(url)=>{assert.equal(url,config.jwksUrl);return Response.json({keys:[jwk]})};
+const encode=(v:unknown)=>Buffer.from(JSON.stringify(v)).toString('base64url');
+async function token(sub:string){const now=Math.floor(Date.now()/1000),input=encode({alg:'RS256',kid:jwk.kid})+'.'+encode({iss:config.issuer,aud:config.audience,azp:config.clientId,sub,iat:now,exp:now+900,scope:'carbook',name:sub});const sig=await crypto.subtle.sign('RSASSA-PKCS1-v1_5',pair.privateKey,new TextEncoder().encode(input));return 'Bearer '+input+'.'+Buffer.from(sig).toString('base64url')}
+const tokens=new Map<string,string>();
+async function request(sub:string|null,path:string,payload?:unknown,expected=200,extra:Record<string,string>={}){if(sub&&!tokens.has(sub))tokens.set(sub,await token(sub));const r=await handle(new Request('https://mobile.carbook.test'+path,{method:payload===undefined?'GET':'POST',headers:{...(sub?{Authorization:tokens.get(sub)!}:{}),...(payload===undefined?{}:{'Content-Type':'application/json'}),...extra},...(payload===undefined?{}:{body:JSON.stringify(payload)} )}),bindings);const value=r.headers.get('content-type')?.includes('application/json')?await r.json() as any:{error:await r.text()};assert.equal(r.status,expected,JSON.stringify(value));return value;}
+const action=(sub:string,payload:unknown,expected=200)=>request(sub,'/api/action',payload,expected);
+try{
+ await request(null,'/health');await request(null,'/api/state',undefined,401,{'OAI-Sites-User-Id':'owner-subject','OAI-Sites-Authorization':'forged-service-token'});
+ await request('stranger','/api/state',undefined,403);assert.equal((await db.prepare('SELECT COUNT(*) n FROM profiles').first() as any).n,0);
+ const pilot=await request('pilot-1','/api/state'),uid=pilot.userId;assert.equal(pilot.profiles[0].role,'member','first stranger/invited member cannot become owner');assert.equal(pilot.posts.length,0,'no fictional social activity');
+ const owner=await request('owner-subject','/api/state'),ownerId=owner.userId;assert.equal(owner.profiles.find((p:any)=>p.id===ownerId).role,'owner');
+ await request('owner-subject','/api/state',undefined,403,{Origin:'https://evil.test'});
+ const cors=await handle(new Request('https://mobile.carbook.test/api/state',{method:'OPTIONS',headers:{Origin:'https://allowed.carbook.test'}}),bindings);assert.equal(cors.status,204);assert.equal(cors.headers.get('Access-Control-Allow-Origin'),'https://allowed.carbook.test');
+ const secretPost=await action('pilot-1',{action:'post',body:'Only I should see this.',topic:'Ownership stories',audience:'private'});
+ const second=await request('pilot-2','/api/state'),secondId=second.userId;assert(!second.posts.some((p:any)=>p.id===secretPost.id));assert.equal((await request('pilot-2','/api/read?resource=feed&post='+secretPost.id)).posts.length,0);
+ await action('pilot-2',{action:'deletePost',postId:secretPost.id},404);await action('pilot-2',{action:'memberRole',targetId:uid,role:'moderator'},403);
+ await request('pilot-1','/api/action',{action:'profile',name:'x'.repeat(25000)},413);
+ await request('pilot-1','/api/action',null,400);
+ await request('owner-subject','/api/account/delete',{confirmation:'DELETE MY ACCOUNT'},409);
+ await request('pilot-1','/api/account/delete',{confirmation:'wrong'},400);
+ await db.prepare('INSERT INTO profiles(id,name,created) VALUES(?,?,?)').bind('website-person','Web Member',Date.now()).run();
+ const link=await createMobileLink('website-person');assert.equal(link.code.length,48);assert.notEqual((await db.prepare('SELECT hash FROM mobile_link_codes WHERE user_id=?').bind('website-person').first() as any).hash,link.code);
+ const linked=await request('website-provider-subject','/api/account/link',{code:link.code});assert.equal(linked.userId,'website-person');assert.equal((await request('website-provider-subject','/api/state')).userId,'website-person');
+ await request('second-stranger','/api/account/link',{code:link.code},400);
+ const expired=await createMobileLink('website-person');await db.prepare('UPDATE mobile_link_codes SET expires=0 WHERE hash=?').bind(await hashLink(expired.code)).run();await request('second-stranger','/api/account/link',{code:expired.code},400);
+ const occupied=await createMobileLink('website-person');await request('pilot-1','/api/account/link',{code:occupied.code},409);
+ await request('pilot-3','/api/state');await request('pilot-3','/api/account/link',{code:occupied.code});assert.equal((await request('pilot-3','/api/state')).userId,'website-person');
+ const car=await action('pilot-1',{action:'car',name:'Test Car',year:2025,story:'My personal car',image:null});
+ const group=await action('pilot-1',{action:'group',name:'Private Garage',description:'A private community for testing.',privacy:'private',rules:'Be respectful.',color:'forest'});
+ await action('pilot-1',{action:'post',body:'Private group post',topic:'Ownership stories',groupId:group.id});assert.equal((await request('pilot-2','/api/read?resource=feed&group='+group.id)).posts.length,0);await request('pilot-2','/api/read?resource=groupMembers&id='+group.id,undefined,403);
+ const detail=await request('pilot-1','/api/read?resource=detail&kind=group&id='+group.id);assert.equal(detail.item.name,'Private Garage');
+ const event=await action('pilot-1',{action:'event',title:'Garage meetup',description:'A meetup for members and their cars.',city:'Karachi',location:'Club parking lot',starts:Date.now()+86400000,capacity:5});
+ const listing=await action('pilot-1',{action:'listing',title:'Car wheels',description:'A set of spare wheels in good condition.',price:5000,currency:'PKR',category:'Parts',city:'Karachi'});
+ const page=await action('pilot-1',{action:'page',name:'Test Workshop',description:'A workshop for careful car enthusiasts.',city:'Karachi',category:'Workshop',website:''});
+ await action('pilot-2',{action:'reportContent',entityType:'listing',entityId:listing.id,reason:'A report containing information to erase.'});
+ await action('pilot-1',{action:'preferences',defaultAudience:'community',messagePolicy:'everyone',notificationsEnabled:true,showExamples:false});await action('pilot-2',{action:'preferences',defaultAudience:'community',messagePolicy:'everyone',notificationsEnabled:true,showExamples:false});
+ const conversation=await action('pilot-1',{action:'conversation',targetId:secondId});const dedup=crypto.randomUUID();await action('pilot-1',{action:'message',conversationId:conversation.id,body:'Private personal message.',clientId:dedup});await action('pilot-1',{action:'message',conversationId:conversation.id,body:'Private personal message.',clientId:dedup});assert.equal((await request('pilot-2','/api/read?resource=messages&id='+conversation.id)).messages.length,1,'idempotent message send');
+ const file=new FormData();file.append('file',new Blob([new Uint8Array([255,216,255,0,1,2,3,4])],{type:'image/jpeg'}),'test.jpg');const uploadedResponse=await handle(new Request('https://mobile.carbook.test/api/upload',{method:'POST',headers:{Authorization:tokens.get('pilot-1')!},body:file}),bindings);assert.equal(uploadedResponse.status,200);const uploaded=await uploadedResponse.json() as any;assert.equal(files.size,1);await request('pilot-2',uploaded.url,undefined,404);
+ await request('pilot-1','/api/account/delete',{confirmation:'DELETE MY ACCOUNT'});assert.equal((await request('pilot-1','/api/state')).accountStatus,'deletion_pending');await action('owner-subject',{action:'memberStatus',targetId:uid,status:'active'},409);
+ await action('pilot-1',{action:'post',body:'Cannot write after deletion request',topic:'Ownership stories'},403);
+ await request('pilot-1','/api/account/cancel-deletion',{});assert.equal((await request('pilot-1','/api/state')).accountStatus,'active');
+ await request('pilot-1','/api/account/delete',{confirmation:'DELETE MY ACCOUNT'});await db.prepare('UPDATE deletion_requests SET execute_after=0 WHERE user_id=?').bind(uid).run();await request('pilot-1','/api/account/cancel-deletion',{},409);
+ await purgeDueAccounts(bucket as unknown as R2Bucket);assert.equal(files.size,0);assert.equal((await db.prepare('SELECT COUNT(*) n FROM media WHERE owner_id=?').bind(uid).first() as any).n,0);
+ await purgeDueAccounts(bucket as unknown as R2Bucket);await purgeDueAccounts(bucket as unknown as R2Bucket);
+ const tombstone=(await request('pilot-1','/api/state'));assert.equal(tombstone.accountStatus,'deleted');assert.equal(tombstone.userId,uid);assert.equal(tombstone.profiles[0].name,'Deleted member');
+ for(const [table,column]of [['posts','author_id'],['cars','owner_id'],['circles','owner_id'],['meetups','organizer_id'],['pages','owner_id'],['listings','seller_id']])assert.equal((await db.prepare(`SELECT COUNT(*) n FROM ${table} WHERE ${column}=?`).bind(uid).first() as any).n,0,table+' erased');
+ assert.equal((await db.prepare('SELECT COUNT(*) n FROM content_reports WHERE entity_id=?').bind(listing.id).first() as any).n,0);assert.equal((await db.prepare('SELECT body FROM messages WHERE sender_id=?').bind(uid).first() as any).body,'');
+ assert.equal((await db.prepare('SELECT status FROM deletion_requests WHERE user_id=?').bind(uid).first() as any).status,'completed');
+ await request('pilot-2','/api/account/transfer',{targetId:ownerId,confirmation:'TRANSFER OWNERSHIP'},403);await request('owner-subject','/api/account/transfer',{targetId:secondId,confirmation:'TRANSFER OWNERSHIP'});assert.equal((await request('pilot-2','/api/state')).profiles.find((p:any)=>p.id===secondId).role,'owner');assert.equal((await request('owner-subject','/api/state')).profiles.find((p:any)=>p.id===ownerId).role,'member');
+ console.log('Mobile API integration passed: real SQLite migrations, signed RSA tokens, closed registration, trusted ownership, CORS, private posts/groups/media, guarded edits, one-time linking, idempotent messages, deletion cancellation/purge/tombstones, ownership transfer.');
+}finally{globalThis.fetch=originalFetch;sqlite.close()}

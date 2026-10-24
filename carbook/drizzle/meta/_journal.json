@@ -1,0 +1,41 @@
+{
+  "version": "7",
+  "dialect": "sqlite",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "6",
+      "when": 1792818556962,
+      "tag": "0000_true_natasha_romanoff",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1792818722678,
+      "tag": "0001_skinny_sally_floyd",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1792819531023,
+      "tag": "0002_yellow_virginia_dare",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1792821607284,
+      "tag": "0003_woozy_ma_gnuci",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1792845116717,
+      "tag": "0004_misty_yellowjacket",
+      "breakpoints": true
+    }
+  ]
+}

@@ -2,7 +2,13 @@
 
 Nineteen self-contained browser demos for dealerships, workshops, car rental and fleet operations.
 
-## Projects (19)
+## Carbook — web, iOS and Android source
+
+[Open Carbook](carbook/README.md) · [Build from scratch, step by step](carbook/mobile/docs/BUILD_FROM_SCRATCH.md) · [Release checklist](carbook/mobile/docs/RELEASE.md)
+
+Carbook is an automotive social application with profiles, garages, feeds, messages, communities, events, marketplace listings and moderation. Its full web/native source, shared API, migrations, tests and EAS profiles are in `carbook/`. Native infrastructure and signing still need configuration; this upload contains no compiled APK or IPA. The 19 independent browser demos below retain their existing behavior.
+
+## Browser demos (19)
 
 - [Automotive Lead Follow-up & Referrals](automotive-lead-referral/): [open demo](automotive-lead-referral/index.html)
 - [Commercial Vehicle Sales & Financing Workflow](commercial-vehicle-sales-financing/): [open demo](commercial-vehicle-sales-financing/index.html)
@@ -24,7 +30,7 @@ Nineteen self-contained browser demos for dealerships, workshops, car rental and
 - [Combined Dealership & Workshop KPI System](dealer-workshop-kpis/): [open demo](dealer-workshop-kpis/index.html)
 - [Vehicle Profitability & Stock-Intelligence Platform](vehicle-profit-stock-intelligence/): [open demo](vehicle-profit-stock-intelligence/index.html)
 
-Each folder contains a runnable browser demo (`index.html`), fictional seed data, record editing, search and status filters, and CSV export. Data stays in the local browser. These are demonstration prototypes, not deployed multi-user production systems.
+Each listed demo folder contains a runnable browser demo (`index.html`), fictional seed data, record editing, search and status filters, and CSV export. Data stays in the local browser. These are demonstration prototypes, not deployed multi-user production systems.
 
 Related full applications: [soft-garage-workshop-manager](https://github.com/atifmahmoodai/soft-garage-workshop-manager) (garage and repair-shop management system) and [data-showroom-profitability-dashboard](https://github.com/atifmahmoodai/data-showroom-profitability-dashboard) (Power BI dashboard fed by the showroom app).
 
@@ -32,7 +38,7 @@ The [soft-showroom-manager](https://github.com/atifmahmoodai/soft-showroom-manag
 
 ## Run
 
-Open any project's `index.html` directly, or serve the repo root with `python -m http.server 8000` and visit `http://localhost:8000/<project-folder>/`.
+Open any browser demo's `index.html` directly, or serve the repo root with `python -m http.server 8000` and visit `http://localhost:8000/<project-folder>/`.
 
 ## Check
 
@@ -43,3 +49,4 @@ python scripts/validate_catalog_apps.py
 Requires Python 3 and Node.js (used to syntax-check each demo's JavaScript).
 
 **Market note:** These projects reflect categories found in real buyer listings and market research. The repository does not imply a client has paid for, commissioned or verified any demo.
+

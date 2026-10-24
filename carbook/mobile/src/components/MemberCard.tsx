@@ -1,0 +1,10 @@
+import React from 'react';
+import {Pressable,Text,View} from 'react-native';
+import {router} from 'expo-router';
+import {useCarbook} from '../core/store';
+import type {Profile} from '../core/types';
+import {Avatar,Button,Card,ErrorNotice,Label,confirm,useTask} from './ui';
+import {colors} from './theme';
+export function MemberCard({profile:p,compact=false}:{profile:Profile;compact?:boolean}){const {data,act}=useCarbook(),task=useTask(),friend=data?.friendships.find(f=>(f.sender_id===p.id&&f.recipient_id===data.userId)||(f.recipient_id===p.id&&f.sender_id===data.userId)),own=p.id===data?.userId;
+ const request=(decision:string)=>act({action:'friend',targetId:p.id,decision});
+ return <Card><Pressable onPress={()=>router.push({pathname:'/member/[id]',params:{id:p.id}})} style={{flexDirection:'row',gap:12,alignItems:'center'}}><Avatar name={p.name} path={p.avatar} size={50}/><View style={{flex:1}}><Text style={{fontSize:17,fontWeight:'700',color:colors.ink}}>{p.name}</Text><Label muted>{p.city||'Carbook member'}</Label></View></Pressable>{!compact&&!own&&<><View style={{flexDirection:'row',gap:8,flexWrap:'wrap'}}>{friend?.status==='accepted'?<Button title="Friends ✓" secondary onPress={()=>confirm('Remove friend?','You will no longer see each other’s friends-only posts.',()=>request('remove'))}/>:friend?.status==='pending'?friend.recipient_id===data?.userId?<><Button title="Accept" loading={task.busy} onPress={()=>void task.run(()=>request('accept'))}/><Button title="Decline" secondary disabled={task.busy} onPress={()=>void task.run(()=>request('decline'))}/></>:<Button title="Cancel request" secondary loading={task.busy} onPress={()=>void task.run(()=>request('cancel'))}/>:<Button title="Add friend" loading={task.busy} onPress={()=>void task.run(()=>request('request'))}/>}<Button title="Message" icon="message" secondary disabled={task.busy} onPress={()=>void task.run(async()=>{const result=await act<{id:string}>({action:'conversation',targetId:p.id});router.push({pathname:'/chat/[id]',params:{id:result.id}})})}/></View><ErrorNotice message={task.error}/></>}</Card>}

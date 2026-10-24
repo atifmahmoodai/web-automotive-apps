@@ -1,0 +1,5 @@
+import React,{useState} from 'react';
+import {router,useLocalSearchParams} from 'expo-router';
+import {useCarbook} from '../src/core/store';
+import {Button,Card,ErrorNotice,Field,Label,Screen,useTask} from '../src/components/ui';
+export default function Report(){const {entityType,id}=useLocalSearchParams<{entityType:string;id:string}>(),{act}=useCarbook(),[reason,setReason]=useState(''),[sent,setSent]=useState(false),task=useTask();return <Screen title="Report content" back>{sent?<Card><Label>Your report has been sent to community moderators.</Label><Button title="Done" onPress={()=>router.back()}/></Card>:<><Label>Tell us what needs attention. Reports are reviewed by a human moderator.</Label><Field label="What happened?" placeholder="Describe the problem…" multiline maxLength={500} value={reason} onChangeText={setReason} style={{minHeight:150}}/><ErrorNotice message={task.error}/><Button title="Submit report" loading={task.busy} disabled={reason.trim().length<5} onPress={()=>void task.run(async()=>{await act(entityType==='post'?{action:'report',postId:id,reason}:{action:'reportContent',entityType,entityId:id,reason});setSent(true)})}/></>}</Screen>}

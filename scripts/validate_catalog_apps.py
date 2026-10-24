@@ -3,7 +3,8 @@ from pathlib import Path
 import json, re, subprocess, sys, tempfile
 ROOT=Path(__file__).resolve().parents[1]
 projects=json.loads((ROOT/'scripts'/'catalog-manifest.json').read_text()) if (ROOT/'scripts'/'catalog-manifest.json').exists() else None
-folders=sorted(p for p in ROOT.glob('*/') if p.is_dir() and p.name!='scripts' and not p.name.startswith('.'))
+# Carbook is a full application with its own checks, not an HTML catalog demo.
+folders=sorted(p for p in ROOT.glob('*/') if p.is_dir() and p.name not in {'scripts', 'carbook'} and not p.name.startswith('.'))
 errors=[]
 for folder in folders:
     for name in ['README.md','index.html','project.json']:
@@ -26,3 +27,4 @@ print(f'Project folders: {len(folders)}')
 print(f'Validation failures: {len(errors)}')
 for error in errors: print(error)
 sys.exit(bool(errors))
+

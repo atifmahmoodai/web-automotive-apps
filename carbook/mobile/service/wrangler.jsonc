@@ -1,0 +1,13 @@
+{
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  "name": "carbook-mobile-api",
+  "main": "dist/worker.js",
+  "compatibility_date": "2026-10-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": true,
+  "d1_databases": [{"binding":"DB","database_name":"carbook-mobile","database_id":"CONFIGURE_DATABASE_ID","migrations_dir":"../../drizzle"}],
+  "r2_buckets": [{"binding":"BUCKET","bucket_name":"CONFIGURE_MEDIA_BUCKET"}],
+  "triggers": {"crons": ["*/15 * * * *"]},
+  "vars": {"REGISTRATION_OPEN":"false","CORS_ORIGINS":""},
+  "observability": {"enabled": true, "head_sampling_rate": 0.1}
+}

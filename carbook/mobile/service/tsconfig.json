@@ -1,0 +1,1 @@
+{"extends":"../../tsconfig.json","compilerOptions":{"incremental":false},"include":["*.ts","../../lib/**/*.ts","../../cloudflare-env.d.ts"],"exclude":["dist","../node_modules"]}
