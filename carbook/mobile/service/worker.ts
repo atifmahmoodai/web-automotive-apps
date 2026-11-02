@@ -7,10 +7,11 @@ import {uploadMedia} from '../../lib/upload-service';
 import {serveMedia} from '../../lib/media-service';
 import {redeemMobileLink} from '../../lib/mobile-link';
 import {createIdentityVerifier,AuthenticationError,type IdentityConfig} from './identity';
+import {isPremiumGet,isPremiumPost,premiumGet,premiumPost,afterAction,pushPending,type PremiumEnv} from './premium';
 import {provisionIdentity,requestDeletion,cancelDeletion,transferOwnership,purgeDueAccounts} from './accounts';
-export interface MobileBindings{DB:D1Database;BUCKET:R2Bucket;OIDC_ISSUER:string;OIDC_AUDIENCE:string;OIDC_CLIENT_ID:string;OIDC_JWKS_URL:string;OWNER_SUBJECT:string;REGISTRATION_OPEN?:string;ALLOWED_SUBJECTS?:string;CORS_ORIGINS?:string}
+export interface MobileBindings extends PremiumEnv{DB:D1Database;BUCKET:R2Bucket;OIDC_ISSUER:string;OIDC_AUDIENCE:string;OIDC_CLIENT_ID:string;OIDC_JWKS_URL:string;OWNER_SUBJECT:string;REGISTRATION_OPEN?:string;ALLOWED_SUBJECTS?:string;CORS_ORIGINS?:string}
 let verifier:ReturnType<typeof createIdentityVerifier>|null=null,configKey='';
-export async function handle(request:Request,bindings:MobileBindings):Promise<Response>{
+export async function handle(request:Request,bindings:MobileBindings,ctx?:{waitUntil(p:Promise<unknown>):void}):Promise<Response>{
  const url=new URL(request.url),origin=request.headers.get('origin'),allowed=(bindings.CORS_ORIGINS||'').split(',').filter(Boolean),headers=new Headers({'Cache-Control':'no-store','X-Content-Type-Options':'nosniff','Vary':'Origin'});
  if(origin&&!allowed.includes(origin))return json({error:'Origin is not allowed.'},403);
  if(origin){headers.set('Access-Control-Allow-Origin',origin);headers.set('Access-Control-Allow-Headers','Authorization, Content-Type');headers.set('Access-Control-Allow-Methods','GET, POST, OPTIONS');}
@@ -31,17 +32,19 @@ export async function handle(request:Request,bindings:MobileBindings):Promise<Re
   else if(request.method==='GET'&&url.pathname==='/api/read')response=await readResource(request,uid);
   else if(request.method==='GET'&&/^\/api\/media\/[a-zA-Z0-9-]{1,160}$/.test(url.pathname))response=await serveMedia(request,uid,url.pathname.split('/').pop()!);
   else if(request.method==='POST'&&url.pathname==='/api/upload')response=await uploadMedia(request,uid);
+  else if(request.method==='GET'&&isPremiumGet(url.pathname))response=await premiumGet(url,uid,bindings);
   else if(request.method==='GET'&&url.pathname==='/api/account/deletion')response=json({request:await database().prepare('SELECT requested,execute_after,status FROM deletion_requests WHERE user_id=?').bind(uid).first()});
   else if(request.method==='POST'){
    if(Number(request.headers.get('content-length')||0)>24000)throw new ApiError('Request too large.',413);const input=await readJson(request);
    if(url.pathname==='/api/account/delete')response=json(await requestDeletion(uid,String(input.confirmation||'')));
    else if(url.pathname==='/api/account/cancel-deletion')response=json(await cancelDeletion(uid));
    else if(url.pathname==='/api/account/transfer'&&input.confirmation==='TRANSFER OWNERSHIP')response=json(await transferOwnership(uid,String(input.targetId||'')));
-   else if(url.pathname==='/api/action'){const parsed=actionSchema.safeParse(input);if(!parsed.success)throw new ApiError(parsed.error.issues[0]?.message||'Check your input.');await rateLimit(uid,'actions',90);response=parsed.data.action==='init'?json({ok:true}):json(await perform(parsed.data,uid));}
+   else if(url.pathname==='/api/action'){const parsed=actionSchema.safeParse(input);if(!parsed.success)throw new ApiError(parsed.error.issues[0]?.message||'Check your input.');await rateLimit(uid,'actions',90);if(parsed.data.action==='init')response=json({ok:true});else{const start=Date.now(),result=await perform(parsed.data,uid),job=afterAction(bindings,uid,parsed.data as {action:string},result,start);if(ctx)ctx.waitUntil(job);else await job;response=json(result);}}
+   else if(isPremiumPost(url.pathname)){const start=Date.now();response=await premiumPost(url.pathname,input,uid,bindings);const job=afterAction(bindings,uid,{action:url.pathname},null,start);if(ctx)ctx.waitUntil(job);else await job;}
    else throw new ApiError('Not found.',404);
   }else throw new ApiError('Not found.',404);
   }
  }catch(e){const status=e instanceof AuthenticationError?401:e instanceof ApiError?e.status:503;response=json({error:e instanceof AuthenticationError||e instanceof ApiError?e.message:'The service is temporarily unavailable.'},status);if(status===401)headers.set('WWW-Authenticate','Bearer');}
  const final=new Headers(response.headers);headers.forEach((v,k)=>final.set(k,v));return new Response(response.body,{status:response.status,headers:final});
 }
-export default {fetch:handle,async scheduled(_event:ScheduledController,bindings:MobileBindings,ctx:ExecutionContext){ctx.waitUntil(purgeDueAccounts(bindings.BUCKET));}};
+export default {fetch:(request:Request,bindings:MobileBindings,ctx:ExecutionContext)=>handle(request,bindings,ctx),async scheduled(_event:ScheduledController,bindings:MobileBindings,ctx:ExecutionContext){ctx.waitUntil(purgeDueAccounts(bindings.BUCKET));ctx.waitUntil(pushPending(bindings).catch(()=>0));}};
