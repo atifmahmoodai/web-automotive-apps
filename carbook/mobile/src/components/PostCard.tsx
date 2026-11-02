@@ -11,7 +11,7 @@ import {Avatar,Button,Card,Divider,ErrorNotice,IconButton,Photo,confirm,relative
 import {ChoiceSheet,type Choice} from './ChoiceSheet';
 import {Icon} from './Icon';
 import {colors} from './theme';
-function Video({path}:{path:string}){const auth=useAuth(),player=useVideoPlayer({uri:mediaUrl(rawConfig.apiUrl,path),headers:{Authorization:'Bearer '+auth.accessToken}},p=>{p.loop=false});return <VideoView player={player} style={{height:250,backgroundColor:'#10261D',borderRadius:16}} nativeControls fullscreenOptions={{enable:true}}/>;}
+function Video({path}:{path:string}){const auth=useAuth(),player=useVideoPlayer({uri:mediaUrl(rawConfig.apiUrl,path),headers:{Authorization:'Bearer '+auth.accessToken}},p=>{p.loop=false});return <VideoView player={player} style={{height:250,backgroundColor:colors.media,borderRadius:16}} nativeControls fullscreenOptions={{enable:true}}/>;}
 export function PostCard({post,onRemoved}:{post:Post;onRemoved?:()=>void}){
  const {data,client,act,mergeFeed}=useCarbook(),task=useTask(),[choices,setChoices]=useState<Choice[]|null>(null),[removed,setRemoved]=useState(false);const p=data?.posts.find(x=>x.id===post.id)||post,author=data?.profiles.find(x=>x.id===p.author_id),mine=p.author_id===data?.userId;
  if(removed)return null;
