@@ -51,7 +51,22 @@ Replace `carbook-mobile` with the exact configured database name. Apply migratio
 
 Keep `CORS_ORIGINS` empty for native-only clients. If an authenticated browser client is deliberately added, list only its exact approved HTTPS origins. CORS is not authentication; every data request still requires a valid access token.
 
-The configured 15-minute scheduled trigger processes account erasure. Test it against non-production accounts, including failed object deletion and continuation across more than 100 objects. Monitor failed runs and deletion backlog. A request first hides the profile, then becomes eligible for erasure after seven days. Media deletion is bounded per run, so completion can take multiple runs.
+### Premium (0.2.0) configuration
+
+| Name | Where | Secret? | Purpose |
+| --- | --- | --- | --- |
+| `AI_API_KEY` | Worker secret (`wrangler secret put AI_API_KEY`) | **Yes** | Provider key for the car assistant. It is never sent to the app. |
+| `AI_BASE_URL` | Worker var | No | OpenAI-compatible base URL, https only, e.g. `https://api.example.com/v1` |
+| `AI_MODEL` | Worker var | No | Model name passed to `/chat/completions` |
+| `EXPO_ACCESS_TOKEN` | Worker secret | **Yes** | Only if Enhanced Push Security is enabled on the EAS project |
+| `PUSH_DISABLED` | Worker var | No | `true` stops remote push sends |
+| `EAS_PROJECT_ID` | Build environment / `.env` | No | Required for remote push tokens. Currently **empty**: run `eas init` and set it. |
+| `EXPO_PUBLIC_MAP_TILE_URL` | App `.env` | No (bundled) | Optional https raster tile template; defaults to OpenStreetMap |
+| `EXPO_PUBLIC_GEOCODER_URL` | App `.env` | No (bundled) | Optional Nominatim-compatible base; `off` allows coordinates only |
+
+If the assistant is left unconfigured, `/api/assistant` returns 503 and the app shows "Assistant not configured". Provider errors return a generic 502 without echoing provider bodies. Migration `0005_premium_native` adds `push_tokens`, `vehicle_records`, `listing_offers`, `event_checkins`, event `lat`/`lng` and `notifications.pushed`. It is append-only, and you apply it the same way as earlier migrations. For production traffic, use a tile provider whose terms allow it (the OSM community tile server is for light use) and respect the Nominatim usage policy.
+
+The configured 15-minute scheduled trigger processes account erasure and also pushes recent unpushed notifications created on the website. Test it against non-production accounts, including failed object deletion and continuation across more than 100 objects. Monitor failed runs and deletion backlog. A request first hides the profile, then becomes eligible for erasure after seven days. Media deletion is bounded per run, so completion can take multiple runs.
 
 ## 4. Connect existing website profiles
 
@@ -128,7 +143,7 @@ Run with at least two real test accounts on a physical iPhone and Android device
 - Keyboard/scroll behavior, Android system Back, iOS swipe-back, deep links on cold/warm start, external Maps, large text and screen readers.
 - Friendship requests, message privacy, attachments, repeated Send taps, a lost response/retry, read receipts, unsend, blocked-user behavior.
 - Private community requests/approval/removal, event capacity and cancellation, listing status, page ownership.
-- App background/foreground, airplane mode, poor connectivity, server errors and resume after token expiry. No background push behavior is promised.
+- App background/foreground, airplane mode, poor connectivity, server errors and resume after token expiry. Test remote push on a physical device once `EAS_PROJECT_ID` is set: messages, reactions, comments, event updates and offers, plus a notification tap opening the right screen and the in-app preference switch suppressing pushes.
 - Report/block/unblock, moderation permissions, data export to Files/share sheet and local temporary-file cleanup.
 - Delete/cancel during the waiting period, deny cancellation after the deadline, cron completion, object removal and no deleted-account resurrection.
 - Crash collection without bearer tokens or private content, infrastructure alerts, backups, restore drill and deletion backlog alerts.
@@ -139,6 +154,6 @@ Resolve all failures before TestFlight/Play internal testing, then repeat the cr
 
 Prepare real-device screenshots, support contact, privacy/terms pages, community standards, accurate data-collection disclosures, content/age ratings, review access and moderation operations. Complete the current store requirements for user-generated content and account deletion, including a working external deletion-request/support URL where required. Review the selected identity provider's sign-in options against Apple's current rules.
 
-Device notifications currently exist only inside the running app. Do not advertise push delivery, voice/video calling, end-to-end encrypted messaging, payments, subscriptions, universal web links or offline synchronization. Those services are not implemented/connected.
+Remote push is implemented but unverified until an EAS project ID is configured and tested on a device. Do not advertise voice/video calling, end-to-end encrypted messaging, payments, subscriptions, universal web links or offline synchronization. Those services are not implemented/connected.
 
 Apple App Store / Google Play submission and approval were not performed. An owner must complete any account, identity, fee or contractual steps using their own account. After approved binaries exist, submit through the official consoles or a correctly authorized EAS Submit configuration.

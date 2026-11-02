@@ -1,3 +1,16 @@
+# Validation record — 2 November 2026 (0.2.0 premium)
+
+| Check | Result and scope |
+| --- | --- |
+| Mobile pure core | 25 checks passed, including the new VIN check digit/vPIC parsing, fuel economy, expense totals, due ranking, reminder plan, strict dates, tile/geocoder URL safety, Mercator round trip, directions URLs, coordinates, notification route allow-list and offer amounts |
+| Premium API | Passed against real migrations through 0005 with signed tokens. Covers push registration, fan-out, preferences, generic DM text, dead-token pruning and the cron sweep; owner-only garage records and private media; offers/counter-offers with blocks; Carbook-only price insight; organizer-only pins and check-in windows; event update notifications; the server-side assistant (503 when unconfigured, no provider key or body leakage); and deletion purge |
+| Mobile TypeScript | `npm run typecheck` passed with the installed Expo SDK 58 / React Native types |
+| Website integration suite and TypeScript | Passed |
+| Android release APK | Built locally with `expo prebuild` + `assembleRelease`, signed with the **debug keystore** (sideload testing only) |
+| Device runtime | **Not verified:** dark mode rendering, map gestures, notifications/reminders, directions handoff, image pickers, onboarding and assistant UI have not been run on a phone or emulator |
+| Remote push delivery | **Not verified:** `EAS_PROJECT_ID` is empty, so no Expo push token can be issued |
+| AI provider | **Not verified live:** tested only against a stubbed OpenAI-compatible endpoint |
+
 # Validation record — 24 October 2026
 
 This record distinguishes executed checks from work that could not run. It is not a production certification.

@@ -50,13 +50,14 @@ The preceding web release was reviewed in browser at desktop, tablet and mobile 
 
 The existing Site is owner-private. This release preserves its audience and deploys through Sites to the same project. The first authenticated account becomes the community owner; initialize it while access is still owner-private. The application cannot broaden the platform's access list itself.
 
-Deployment applies committed migrations before publishing the Worker. Migrations `0000` and `0001` are historical; `0002` adds the social-platform tables/columns and `0003` adds query indexes. `0004` adds native identity mappings, single-use connection codes and deletion requests. Never edit applied migrations. All migrations are schema-only; optional fictional fixtures are inserted idempotently by account initialization.
+Deployment applies committed migrations before publishing the Worker. Migrations `0000` and `0001` are historical; `0002` adds the social-platform tables/columns and `0003` adds query indexes. `0004` adds native identity mappings, single-use connection codes and deletion requests. `0005` adds push tokens, vehicle records, listing offers, event check-ins/coordinates and a notification push flag. Never edit applied migrations. All migrations are schema-only; optional fictional fixtures are inserted idempotently by account initialization.
 
 Before a wider release, verify owner sign-in and upload persistence, exercise a second allowed member, appoint moderation coverage, and configure operational monitoring, backups, retention and a tested recovery procedure. The moderation console requires human review. Only specifically reported messages are exposed to moderation; it is not a private-inbox browser.
 
 ## Current boundaries
 
-- No voice/video calls, live streaming, email/SMS/push delivery, payments, subscriptions or advertising infrastructure is connected.
+- Mobile push delivery is implemented in the native app/API but needs an EAS project ID and device verification (see `mobile/docs/RELEASE.md`). The mobile-only premium features (garage records, offers, check-ins, AI assistant) are not shown on the website.
+- No voice/video calls, live streaming, email/SMS delivery, payments, subscriptions or advertising infrastructure is connected.
 - Feed/message/comment histories have keyset pagination. Discovery lists are bounded (300 profiles, 200 cars, 150 listings and 100 groups/events/pages); search provides additional matching results. This release has not been validated for large public-network traffic.
 - Upload limits are 5 MB per photograph and 20 MB per video, with up to six attachments and one video per post. Recorded uploads are limited to 2 GB/2,000 files per account. A garage holds up to 20 vehicles.
 - Account deactivation hides the account and permits reactivation. It is not permanent data erasure. Expired stories become inaccessible but their records/media are retained. Automated retention and orphan-media cleanup are not configured.
