@@ -15,11 +15,19 @@ import {Onboarding} from '../src/screens/Onboarding';
 import {readPref,writePref} from '../src/core/prefs';
 import {setupNotifications,syncPush} from '../src/core/push';
 import {notificationRoute} from '../src/core/routes';
-export function ErrorBoundary({retry}:ErrorBoundaryProps){return <Screen><Empty icon="refresh" title="Let’s try that again" description="Carbook encountered an unexpected problem. Your saved content is still on the service." action={<Button title="Reload Carbook" onPress={retry}/>}/></Screen>}
+import {installTelemetry,reportError} from '../src/core/telemetry';
+import {Pressable} from 'react-native';
+import {useSafeAreaInsets} from 'react-native-safe-area-context';
+installTelemetry();
+export function ErrorBoundary({error,retry}:ErrorBoundaryProps){useEffect(()=>{reportError(error,'render_error')},[error]);return <Screen><Empty icon="refresh" title="Let’s try that again" description="Carbook encountered an unexpected problem. Your saved content is still on the service." action={<Button title="Reload Carbook" onPress={retry}/>}/></Screen>}
 function AccountGate({children}:{children:React.ReactNode}){const {data,error,refresh,client}=useCarbook(),auth=useAuth(),task=useTask();if(!data)return <Screen><Empty title="Opening your garage" description="Loading your Carbook community."/><ErrorNotice message={error} retry={()=>void refresh().catch(()=>{})}/>{!error&&<ActivityIndicator color={colors.forest}/>}{error&&<ConnectAccount/>}<Button title="Sign out" secondary onPress={()=>void auth.signOut()}/></Screen>;
  if(data.accountStatus!=='active')return <Screen><Empty icon="shield" title={data.accountStatus==='deletion_pending'?'Account deletion scheduled':data.accountStatus==='deleted'?'Account deleted':'Account unavailable'} description={data.accountStatus==='deletion_pending'?'Your profile is hidden. You can cancel deletion during the seven-day waiting period.':data.accountStatus==='deleted'?'Your Carbook content has been removed.':'This account is deactivated or suspended.'}/><ErrorNotice message={task.error}/>{data.accountStatus==='deletion_pending'&&<Button title="Cancel account deletion" loading={task.busy} onPress={()=>void task.run(async()=>{await client.request('/api/account/cancel-deletion',{method:'POST',body:'{}'});await refresh()})}/>}<Button title="Sign out" secondary onPress={()=>void auth.signOut()}/></Screen>;
- return <><PushBridge/>{children}</>;
+ return <View style={{flex:1}}><PushBridge/>{children}<OfflineBanner/></View>;
 }
+// Shown whenever the app is displaying saved data (offline launch or a failed refresh). Tap to retry.
+function OfflineBanner(){const {staleSince,loading,refresh}=useCarbook(),insets=useSafeAreaInsets();if(!staleSince)return null;
+ const time=new Date(staleSince).toLocaleTimeString([],{hour:'numeric',minute:'2-digit'});
+ return <Pressable accessibilityRole="button" accessibilityLiveRegion="polite" accessibilityLabel={`Offline. Showing data saved at ${time}. Double tap to retry.`} onPress={()=>void refresh().catch(()=>{})} style={{position:'absolute',left:16,right:16,bottom:insets.bottom+76,flexDirection:'row',alignItems:'center',gap:10,paddingHorizontal:14,paddingVertical:10,borderRadius:14,backgroundColor:colors.ink,opacity:.94}}><Text maxFontSizeMultiplier={1.6} style={{flex:1,color:colors.paper,fontSize:13,fontWeight:'600'}}>Offline · showing data from {time}</Text>{loading?<ActivityIndicator color={colors.paper}/>:<Text style={{color:colors.paper,fontSize:13,fontWeight:'800'}}>Retry</Text>}</Pressable>;}
 // Registers push silently for opted-in devices and opens validated routes from notification taps.
 function PushBridge(){const {client}=useCarbook(),last=Notifications.useLastNotificationResponse();
  useEffect(()=>{void setupNotifications().then(()=>syncPush(client)).catch(()=>{})},[client]);

@@ -1,5 +1,6 @@
 import React,{useMemo,useRef,useState} from 'react';
-import {Linking,PanResponder,Pressable,Text,View} from 'react-native';
+import {openExternal} from '../core/open-link';
+import {PanResponder,Pressable,Text,View} from 'react-native';
 import {Image} from 'expo-image';
 import {project,tileTemplate,tileUrl,unproject,visibleTiles} from '../core/geo';
 import {colors,radius} from './theme';
@@ -18,5 +19,5 @@ export function TileMap({markers,initial,height=320,onSelect,attribution='© Ope
   {size.width>0&&markers.map(m=>{const p=project(m.lat,m.lng,view.zoom),x=p.x-c.x+size.width/2,y=p.y-c.y+size.height/2;if(x<-30||y<-40||x>size.width+30||y>size.height+10)return null;
    return <Pressable key={m.id} accessibilityRole="button" accessibilityLabel={m.label} onPress={()=>{tap();onSelect?.(m.id)}} hitSlop={10} style={{position:'absolute',left:x-17,top:y-40,alignItems:'center'}}><View style={{width:34,height:34,borderRadius:17,backgroundColor:m.active?colors.orange:colors.forest,borderWidth:3,borderColor:colors.surface,alignItems:'center',justifyContent:'center'}}><Icon name="calendar" size={16} color={colors.onAccent}/></View><View style={{width:3,height:8,backgroundColor:m.active?colors.orange:colors.forest}}/></Pressable>})}
   <View style={{position:'absolute',right:10,top:10,gap:8}}>{([['plus',1],['minus',-1]] as const).map(([k,d])=><Pressable key={k} accessibilityRole="button" accessibilityLabel={d>0?'Zoom in':'Zoom out'} onPress={()=>zoom(d)} style={{width:40,height:40,borderRadius:20,backgroundColor:colors.surface,alignItems:'center',justifyContent:'center',borderWidth:1,borderColor:colors.line}}>{d>0?<Icon name="plus" size={20}/>:<Text style={{fontSize:24,lineHeight:26,color:colors.forest,fontWeight:'700'}}>−</Text>}</Pressable>)}</View>
-  <Pressable accessibilityRole="link" onPress={()=>void Linking.openURL('https://www.openstreetmap.org/copyright')} style={{position:'absolute',right:0,bottom:0,paddingHorizontal:6,paddingVertical:2,backgroundColor:colors.surface+'DD',borderTopLeftRadius:6}}><Text style={{fontSize:10,color:colors.ink}}>{attribution}</Text></Pressable>
+  <Pressable accessibilityRole="link" onPress={()=>void openExternal('https://www.openstreetmap.org/copyright')} style={{position:'absolute',right:0,bottom:0,paddingHorizontal:6,paddingVertical:2,backgroundColor:colors.surface+'DD',borderTopLeftRadius:6}}><Text style={{fontSize:10,color:colors.ink}}>{attribution}</Text></Pressable>
  </View>}

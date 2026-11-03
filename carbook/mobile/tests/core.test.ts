@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import {CarbookClient,ApiError,mediaUrl,mergeById,parseDeepLink} from '../src/core/client';
+import {CarbookClient,ApiError,mediaUrl,mergeById,parseDeepLink,backoffDelay,requestId} from '../src/core/client';
 import {RefreshVault} from '../src/core/vault';
 import {localEventTime} from '../src/core/dates';
 import {validateConfig} from '../src/core/config';
@@ -8,6 +8,9 @@ import {fuelStats,categoryTotals,dueItems,reminderPlan,parseDay,dayString,monthl
 import {tileTemplate,geocoderBase,project,unproject,tileUrl,directionsUrls,parseCoords,fitBounds,DEFAULT_TILES,geocode} from '../src/core/geo';
 import {notificationRoute} from '../src/core/routes';
 import {parseAmount} from '../src/core/premium';
+import {safeExternalUrl,optionalHttps} from '../src/core/urls';
+import {scrub,crashReport,analyticsEvent} from '../src/core/telemetry-core';
+import {parseSnapshot,SNAPSHOT_MAX_AGE} from '../src/core/snapshot';
 let checks=0;
 async function test(name:string,work:()=>unknown){await work();checks++;console.log('PASS',name)}
 await test('media credentials stay on the configured API',()=>{
@@ -28,8 +31,8 @@ await test('JSON API errors and proxy HTML responses remain clear',async()=>{
  const broken=new CarbookClient('https://api.carbook.test',async()=>'token',async()=>new Response('<html>login</html>',{status:200,headers:{'Content-Type':'text/html'}}));await assert.rejects(broken.read('feed'),ApiError);
 });
 await test('timeouts cancel reads without inventing an empty result',async()=>{
- const c=new CarbookClient('https://api.carbook.test',async()=>'token',async(_url,options)=>new Promise((_resolve,reject)=>options?.signal?.addEventListener('abort',()=>reject(new Error('abort')))));
- await assert.rejects(c.request('/api/state',{},10),(e:any)=>e instanceof ApiError&&!e.uncertain);
+ let attempts=0;const c=new CarbookClient('https://api.carbook.test',async()=>'token',async(_url,options)=>{attempts++;return new Promise((_resolve,reject)=>options?.signal?.addEventListener('abort',()=>reject(new Error('abort'))))},{sleep:async()=>{}});
+ await assert.rejects(c.request('/api/state',{},10),(e:any)=>e instanceof ApiError&&!e.uncertain);assert.equal(attempts,3,'reads retry twice before failing');
 });
 await test('refresh credentials rotate atomically and sign-out removes every stored chunk',async()=>{
  const values=new Map<string,string>();let fail=false;
@@ -81,4 +84,44 @@ await test('geocoder sends an identifying user agent and validates results',asyn
  await assert.rejects(()=>geocode('Lahore',fake,null));});
 await test('notification payload routes are allow-listed',()=>{for(const v of ['/notifications','/garage','/post/abc-123','/chat/c-1','/garage/car-1'])assert.equal(notificationRoute(v),v);for(const v of ['/settings','/admin','https://evil.test','/post/../admin','/post/a/b',42,null])assert.equal(notificationRoute(v),null);});
 await test('offer amounts must be positive whole numbers',()=>{assert.equal(parseAmount('1,250,000'),1250000);for(const v of ['0','-5','12.5','abc',''])assert.equal(parseAmount(v),null);});
+await test('reads retry 502/503/504/429 with backoff and honour Retry-After; writes never retry',async()=>{
+ const delays:number[]=[];let calls=0;const statuses=[503,429,200];
+ const c=new CarbookClient('https://api.carbook.test',async()=>'t',async()=>{const st=statuses[calls++];return st===200?Response.json({ok:true}):Response.json({error:'busy'},{status:st,headers:st===429?{'Retry-After':'3'}:{}})},{sleep:async ms=>{delays.push(ms)},random:()=>.5});
+ assert.deepEqual(await c.request('/api/state'),{ok:true});assert.equal(calls,3);assert.deepEqual(delays,[400,3000]);
+ calls=0;const w=new CarbookClient('https://api.carbook.test',async()=>'t',async()=>{calls++;return Response.json({error:'down'},{status:503})},{sleep:async()=>{}});
+ await assert.rejects(w.action({action:'post'}),(e:any)=>e.status===503&&!e.uncertain);assert.equal(calls,1,'writes are not replayed');
+ assert.equal(backoffDelay(0,'600'),8000,'Retry-After is capped');assert.equal(backoffDelay(5,null,()=>.5),6000);assert.equal(backoffDelay(1,'abc',()=>.5),1200);
+});
+await test('a 401 forces one token refresh and retries; a second 401 surfaces',async()=>{
+ const forced:boolean[]=[];let n=0;const c=new CarbookClient('https://api.carbook.test',async o=>{forced.push(!!o?.force);return 'tok'+forced.length},async(_u,init)=>{n++;const auth=new Headers(init!.headers).get('Authorization');return auth==='Bearer tok2'?Response.json({ok:true}):Response.json({error:'expired'},{status:401})});
+ assert.deepEqual(await c.action({action:'init'}),{ok:true});assert.deepEqual(forced,[false,true]);assert.equal(n,2);
+ const d=new CarbookClient('https://api.carbook.test',async()=>'bad',async()=>Response.json({error:'Session expired.'},{status:401}));await assert.rejects(d.request('/api/state'),(e:any)=>e.status===401&&e.message==='Session expired.');
+});
+await test('token failures are never reported as uncertain writes',async()=>{
+ let sent=0;const c=new CarbookClient('https://api.carbook.test',async()=>{throw new Error('offline')},async()=>{sent++;return Response.json({})});
+ await assert.rejects(c.action({action:'post',body:'x'}),(e:any)=>e instanceof ApiError&&!e.uncertain&&/refresh your session/.test(e.message));assert.equal(sent,0);
+ const s=new CarbookClient('https://api.carbook.test',async()=>{throw new ApiError('Your session ended. Sign in again to continue.',401)},async()=>Response.json({}));await assert.rejects(s.request('/api/state'),(e:any)=>e.status===401);
+});
+await test('requests carry a request id and client version; server ids and friendly 5xx text reach the UI',async()=>{
+ let h:Headers|undefined;const c=new CarbookClient('https://api.carbook.test',async()=>'t',async(_u,init)=>{h=new Headers(init!.headers);return new Response('<html>Bad gateway</html>',{status:502,headers:{'Content-Type':'text/html','X-Request-Id':'srv-123'}})},{version:'0.3.0',retries:0});
+ await assert.rejects(c.request('/api/state'),(e:any)=>e.requestId==='srv-123'&&/having trouble/.test(e.message));assert.equal(h!.get('X-Client-Version'),'0.3.0');assert.match(h!.get('X-Request-Id')||'',/^m-[0-9a-f]{16}$/);
+ assert.notEqual(requestId(),requestId());
+});
+await test('external links allow only http(s) without credentials',()=>{
+ assert.equal(safeExternalUrl(' https://carbook.test/a?b=1 '),'https://carbook.test/a?b=1');assert.equal(safeExternalUrl('http://shop.test'),'http://shop.test/');
+ for(const v of ['javascript:alert(1)','intent://scan#Intent;end','file:///etc/passwd','https://user:pw@evil.test','tel:123','data:text/html,x','','https://'+'a'.repeat(3000),null,42])assert.equal(safeExternalUrl(v),null,String(v).slice(0,40));
+ assert.equal(optionalHttps('https://crash.test/ingest/'),'https://crash.test/ingest');for(const v of [undefined,'','http://crash.test','https://localhost/x','not a url'])assert.equal(optionalHttps(v),null);
+});
+await test('crash reports and analytics are scrubbed of tokens and personal data',()=>{
+ const e=new Error('fetch failed for alice@example.com with Bearer abc.def.ghi and ExponentPushToken[xyz] code=SECRET123 phone +92 300 1234567');
+ const r=crashReport('crash',e,{fatal:true,version:'0.3.0',build:'3',platform:'android',now:new Date(0)});
+ for(const leak of ['alice@','abc.def','xyz]','SECRET123','1234567'])assert(!JSON.stringify(r).includes(leak),leak);assert.equal(r.fatal,true);assert.equal(r.at,'1970-01-01T00:00:00.000Z');
+ assert.equal(crashReport('unhandled_rejection','plain',{version:'1',build:'',platform:'ios'}).message,'Error: plain');
+ assert.equal(analyticsEvent('Bad Name'),null);assert.deepEqual(analyticsEvent('post_created',{media:true,count:2,body:{nested:1},Email:'x',note:'mail bob@x.io'}),{name:'post_created',props:{media:true,count:2,note:'mail [email]'}});
+});
+await test('offline snapshots are validated and expire',()=>{
+ const now=Date.now(),data={userId:'u1',profiles:[]};
+ assert.equal(parseSnapshot(JSON.stringify({savedAt:now-1000,data}),now)?.data.userId,'u1');
+ for(const bad of ['nope','{}',JSON.stringify({savedAt:now,data:{profiles:[]}}),JSON.stringify({savedAt:now-SNAPSHOT_MAX_AGE-1,data}),JSON.stringify({savedAt:now+3600000,data})])assert.equal(parseSnapshot(bad,now),null);
+});
 console.log(`${checks} mobile core checks passed.`);
