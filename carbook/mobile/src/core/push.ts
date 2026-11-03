@@ -17,6 +17,8 @@ export async function enablePush(client:CarbookClient):Promise<PushResult>{if(!(
  try{const {data:token}=await Notifications.getExpoPushTokenAsync({projectId:id});await client.request('/api/push/register',{method:'POST',body:JSON.stringify({token,platform:Platform.OS==='ios'?'ios':'android'})});await writePref('push',token);return {ok:true,token};}
  catch(e){return {ok:false,reason:e instanceof Error&&e.message.length<160?e.message:'Could not register this device for push.'}}}
 export async function disablePush(client:CarbookClient){const token=await readPref('push');await writePref('push','off');if(token&&token!=='off')await client.request('/api/push/unregister',{method:'POST',body:JSON.stringify({token})}).catch(()=>{});}
+/** Sign-out: remove this device's token from the account (while the session is still valid) and forget the opt-in so the next member on this device starts with push off. */
+export async function disablePushForSignOut(client:CarbookClient){const token=await readPref('push');await writePref('push',null);if(token&&token!=='off')await client.request('/api/push/unregister',{method:'POST',body:JSON.stringify({token})},5000).catch(()=>{});}
 /** Re-register silently on launch when the member opted in earlier and permission is still granted. */
 export async function syncPush(client:CarbookClient){const pref=await readPref('push');if(!pref||pref==='off')return;if(await permissionStatus()!=='granted')return;await enablePush(client).catch(()=>{});}
 export async function pushEnabled(){const p=await readPref('push');return !!p&&p!=='off'}
