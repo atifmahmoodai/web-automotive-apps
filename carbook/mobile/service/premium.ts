@@ -1,9 +1,12 @@
 import {z} from 'zod';
 import {database,json,ApiError,rateLimit,memberAccessible,checkImages,WITH,V,activeOwner,notify,requireActive} from '../../lib/server';
 // Native-only premium features: push delivery, garage records, offers, price insight, event places/check-ins and the AI assistant.
-export interface PremiumEnv{AI_API_KEY?:string;AI_BASE_URL?:string;AI_MODEL?:string;EXPO_ACCESS_TOKEN?:string;PUSH_DISABLED?:string}
+export interface PremiumEnv{AI_API_KEY?:string;AI_BASE_URL?:string;AI_MODEL?:string;AI_DAILY_LIMIT?:string;EXPO_ACCESS_TOKEN?:string;PUSH_DISABLED?:string}
 const EXPO_PUSH='https://exp.host/--/api/v2/push/send',DAY=86400000;
 const id=z.string().trim().min(1).max(120),int=(max:number)=>z.number().int().min(0).max(max);
+/** Per-member daily cap for paid AI calls (AI_DAILY_LIMIT, default 40). Protects the provider bill from a single account. */
+export function assistantDailyLimit(env:PremiumEnv){const n=Number(env.AI_DAILY_LIMIT);return Number.isInteger(n)&&n>0&&n<=10000?n:40;}
+async function dailyQuota(uid:string,scope:string,max:number){const now=Date.now(),day=Math.floor(now/DAY);const row=await database().prepare('INSERT INTO rate_limits(id,hits,expires) VALUES(?,1,?) ON CONFLICT(id) DO UPDATE SET hits=hits+1 RETURNING hits').bind(`${uid}:${scope}:day:${day}`,(day+1)*DAY+3600000).first<{hits:number}>();if((row?.hits||0)>max)throw new ApiError(`You have reached today’s limit of ${max} assistant questions. It resets at midnight UTC.`,429);}
 export function assistantConfigured(env:PremiumEnv){return !!(env.AI_API_KEY&&env.AI_BASE_URL&&env.AI_MODEL&&/^https:\/\//.test(env.AI_BASE_URL))}
 const parse=<T>(schema:z.ZodType<T>,input:unknown)=>{const r=schema.safeParse(input);if(!r.success)throw new ApiError(r.error.issues[0]?.message||'Check your input.');return r.data;};
 const uuid=()=>crypto.randomUUID();
@@ -61,6 +64,7 @@ async function makeOffer(input:unknown,uid:string){const a=parse(offerSchema,inp
  const l=await db.prepare('SELECT id,seller_id,title,currency,status FROM listings WHERE id=?').bind(a.listingId).first<{id:string;seller_id:string;title:string;currency:string;status:string}>();if(!l||l.status==='deleted')throw new ApiError('Listing unavailable.',404);
  if(l.seller_id===uid)throw new ApiError('You cannot make an offer on your own listing.',409);if(l.status!=='active')throw new ApiError('This listing is no longer accepting offers.',409);
  await memberAccessible(l.seller_id,uid);await rateLimit(uid,'offers',10);
+ if(await db.prepare("SELECT 1 FROM listing_offers WHERE listing_id=? AND status='accepted' AND buyer_id!=?").bind(l.id,uid).first())throw new ApiError('The seller has already accepted another offer.',409);
  const existing=await db.prepare('SELECT id,status FROM listing_offers WHERE listing_id=? AND buyer_id=?').bind(l.id,uid).first<{id:string;status:string}>();if(existing?.status==='accepted')throw new ApiError('Your offer was already accepted. Message the seller to arrange the sale.',409);
  const oid=existing?.id||uuid();await db.prepare("INSERT INTO listing_offers(id,listing_id,buyer_id,seller_id,amount,counter,currency,message,status,created,updated) VALUES(?,?,?,?,?,NULL,?,?,'pending',?,?) ON CONFLICT(listing_id,buyer_id) DO UPDATE SET amount=excluded.amount,counter=NULL,message=excluded.message,status='pending',updated=excluded.updated").bind(oid,l.id,uid,l.seller_id,a.amount,l.currency,a.message,now,now).run();
  await notify(l.seller_id,uid,null,`made an offer of ${l.currency} ${a.amount.toLocaleString('en-US')} on “${short(l.title)}”`);return {ok:true,id:oid};}
@@ -70,11 +74,14 @@ async function respondOffer(input:unknown,uid:string){const a=parse(respondSchem
  const open=['pending','countered'].includes(o.status);if(!open)throw new ApiError('This offer is already closed.',409);
  if((a.decision==='accept'||a.decision==='counter')&&o.listing_status!=='active')throw new ApiError('This listing is no longer active.',409);
  let status:string,amount=o.amount,counter=o.counter,message:string;
- if(a.decision==='withdraw'){if(seller)throw new ApiError('Only the buyer can withdraw an offer.',403);status='withdrawn';message='withdrew their offer';}
+ if(a.decision==='withdraw'){if(seller)throw new ApiError('Only the buyer can withdraw an offer.',403);status='withdrawn';message=`withdrew their offer on “${short(o.title)}”`;}
  else if(a.decision==='decline'){if(seller?o.status!=='pending':o.status!=='countered')throw new ApiError('There is nothing to decline yet.',409);status='declined';message=`declined the offer on “${short(o.title)}”`;}
  else if(a.decision==='counter'){if(!seller)throw new ApiError('Make a new offer to change your amount.',403);if(o.status!=='pending')throw new ApiError('Wait for the buyer to respond to your counter-offer.',409);if(!a.amount||a.amount===o.amount)throw new ApiError('Enter a different counter-offer amount.');status='countered';counter=a.amount;message=`countered with ${o.currency} ${a.amount.toLocaleString('en-US')} on “${short(o.title)}”`;}
  else{if(seller?o.status!=='pending':o.status!=='countered')throw new ApiError(seller?'The buyer must respond to your counter-offer.':'There is no counter-offer to accept.',409);status='accepted';if(!seller)amount=o.counter;message=`accepted the offer of ${o.currency} ${Number(amount).toLocaleString('en-US')} on “${short(o.title)}”`;}
- await db.prepare('UPDATE listing_offers SET status=?,amount=?,counter=?,updated=? WHERE id=? AND status=?').bind(status,amount,counter,now,o.id,o.status).run();await notify(peer,uid,null,message);return {ok:true,status};}
+ if(status==='accepted'&&await db.prepare("SELECT 1 FROM listing_offers WHERE listing_id=? AND status='accepted' AND id!=?").bind(o.listing_id,o.id).first())throw new ApiError('Another offer on this listing was already accepted.',409);
+ // Conditional update: a concurrent response (double tap, second device) must not notify twice or overwrite the newer state.
+ const changed=await db.prepare('UPDATE listing_offers SET status=?,amount=?,counter=?,updated=? WHERE id=? AND status=? AND updated=?').bind(status,amount,counter,now,o.id,o.status,o.updated).run();if(!changed.meta?.changes)throw new ApiError('This offer changed. Refresh and try again.',409);
+ await notify(peer,uid,null,message);return {ok:true,status};}
 async function listOffers(url:URL,uid:string){const listingId=url.searchParams.get('listingId');
  const rows=(await database().prepare(WITH+`SELECT o.id,o.listing_id,o.buyer_id,o.seller_id,o.amount,o.counter,o.currency,o.message,o.status,o.created,o.updated,l.title,l.price,l.image,l.status listing_status,b.name buyer_name,s.name seller_name FROM listing_offers o JOIN listings l ON l.id=o.listing_id JOIN profiles b ON b.id=o.buyer_id JOIN profiles s ON s.id=o.seller_id
   WHERE (o.buyer_id=${V} OR o.seller_id=(SELECT id FROM viewer)) AND l.status!='deleted' AND ${activeOwner("CASE WHEN o.buyer_id=(SELECT id FROM viewer) THEN o.seller_id ELSE o.buyer_id END")}${listingId?' AND o.listing_id=?':''} ORDER BY o.updated DESC LIMIT 100`).bind(...(listingId?[uid,listingId]:[uid])).all()).results;return {offers:rows};}
@@ -117,7 +124,7 @@ const assistantSchema=z.object({carId:id.optional(),messages:z.array(z.object({r
 export const ASSISTANT_RULES=`You are the Carbook car assistant, helping car enthusiasts in a community app understand maintenance, ownership, modifications, buying and driving.
 Rules: You are not a substitute for a qualified mechanic or inspection. For anything safety-critical (brakes, steering, suspension failure, airbags, fuel or brake fluid leaks, overheating, smoke, flashing check-engine light) tell the member to stop driving if unsafe and have the car inspected by a professional. Do not invent prices, recalls, specifications or part numbers you are unsure of; say when you are unsure and suggest how to verify. Keep answers concise and practical, using short paragraphs or lists. Decline requests unrelated to cars or that would be illegal or unsafe (for example defeating emissions or safety systems).`;
 async function assistant(input:unknown,uid:string,env:PremiumEnv){if(!assistantConfigured(env))throw new ApiError('The car assistant is not configured on this server.',503);const a=parse(assistantSchema,input);if(a.messages[a.messages.length-1]!.role!=='user')throw new ApiError('Ask a question first.');
- await rateLimit(uid,'assistant',8);let context='';
+ await rateLimit(uid,'assistant',8);await dailyQuota(uid,'assistant',assistantDailyLimit(env));let context='';
  if(a.carId){const car=await ownCar(a.carId,uid);const recent=(await database().prepare("SELECT kind,title,date,odometer FROM vehicle_records WHERE car_id=? AND kind IN('service','fuel') ORDER BY date DESC LIMIT 6").bind(car.id).all()).results as {kind:string;title:string;date:number;odometer:number|null}[];
   context=`The member's car: ${car.year} ${car.name}.${car.story?` Owner notes: ${car.story.slice(0,400)}`:''}${recent.length?` Recent records: ${recent.map(r=>`${new Date(r.date).toISOString().slice(0,10)} ${r.kind} ${r.title}${r.odometer!=null?` at ${r.odometer} km`:''}`).join('; ')}.`:''}`;}
  let res:Response;try{res=await fetch(env.AI_BASE_URL!.replace(/\/+$/,'')+'/chat/completions',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+env.AI_API_KEY},body:JSON.stringify({model:env.AI_MODEL,temperature:0.3,max_tokens:700,messages:[{role:'system',content:ASSISTANT_RULES+(context?'\n'+context:'')},...a.messages]}),signal:AbortSignal.timeout(30000)});}catch{throw new ApiError('The car assistant is unavailable right now. Try again shortly.',502);}
@@ -130,7 +137,7 @@ const GET_ROUTES=['/api/premium/status','/api/garage/records','/api/market/offer
 const POST_ROUTES=['/api/push/register','/api/push/unregister','/api/garage/record','/api/garage/record/delete','/api/market/offer','/api/market/offer/respond','/api/events/place','/api/events/checkin','/api/assistant'];
 export const isPremiumGet=(path:string)=>GET_ROUTES.includes(path),isPremiumPost=(path:string)=>POST_ROUTES.includes(path);
 export async function premiumGet(url:URL,uid:string,env:PremiumEnv):Promise<Response>{await requireActive(uid);switch(url.pathname){
- case '/api/premium/status':return json({assistant:assistantConfigured(env),push:env.PUSH_DISABLED!=='true'});
+ case '/api/premium/status':return json({assistant:assistantConfigured(env),assistantDailyLimit:assistantDailyLimit(env),push:env.PUSH_DISABLED!=='true'});
  case '/api/garage/records':return json(await listRecords(url,uid));
  case '/api/market/offers':return json(await listOffers(url,uid));
  case '/api/market/insight':return json(await insight(url,uid));

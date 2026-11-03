@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import {DatabaseSync} from 'node:sqlite';
 import {readFileSync,readdirSync} from 'node:fs';
-import {handle,type MobileBindings} from '../service/worker';
+import {handle,setLogSink,errorCode,type LogEntry,type MobileBindings} from '../service/worker';
+const logs:LogEntry[]=[];setLogSink(e=>logs.push(e));
 import {purgeDueAccounts} from '../service/accounts';
 import {createMobileLink,hashLink} from '../../lib/mobile-link';
 const sqlite=new DatabaseSync(':memory:');sqlite.exec('PRAGMA foreign_keys=ON');
@@ -64,5 +65,24 @@ try{
  assert.equal((await db.prepare('SELECT COUNT(*) n FROM content_reports WHERE entity_id=?').bind(listing.id).first() as any).n,0);assert.equal((await db.prepare('SELECT body FROM messages WHERE sender_id=?').bind(uid).first() as any).body,'');
  assert.equal((await db.prepare('SELECT status FROM deletion_requests WHERE user_id=?').bind(uid).first() as any).status,'completed');
  await request('pilot-2','/api/account/transfer',{targetId:ownerId,confirmation:'TRANSFER OWNERSHIP'},403);await request('owner-subject','/api/account/transfer',{targetId:secondId,confirmation:'TRANSFER OWNERSHIP'});assert.equal((await request('pilot-2','/api/state')).profiles.find((p:any)=>p.id===secondId).role,'owner');assert.equal((await request('owner-subject','/api/state')).profiles.find((p:any)=>p.id===ownerId).role,'member');
- console.log('Mobile API integration passed: real SQLite migrations, signed RSA tokens, closed registration, trusted ownership, CORS, private posts/groups/media, guarded edits, one-time linking, idempotent messages, deletion cancellation/purge/tombstones, ownership transfer.');
+ // Hardening: consistent error envelope, request ids, security headers, structured logs, body limits
+ const raw=(path:string,init:RequestInit={})=>handle(new Request('https://mobile.carbook.test'+path,init),bindings);
+ const missing=await raw('/api/nope',{headers:{Authorization:tokens.get('pilot-1')!,'X-Request-Id':'client-req-0001'}});assert.equal(missing.status,404);const missingBody=await missing.json() as any;
+ assert.deepEqual(missingBody,{error:'Not found.',code:'not_found',requestId:'client-req-0001'});assert.equal(missing.headers.get('X-Request-Id'),'client-req-0001');
+ for(const [h,v] of [['X-Content-Type-Options','nosniff'],['Cache-Control','no-store'],['X-Frame-Options','DENY'],['Referrer-Policy','no-referrer']])assert.equal(missing.headers.get(h),v,h);assert.match(missing.headers.get('Strict-Transport-Security')||'',/max-age=/);
+ const unsafeId=await raw('/health',{headers:{'X-Request-Id':'bad id <script>'}});assert.match(unsafeId.headers.get('X-Request-Id')||'',/^[0-9a-f-]{36}$/,'unsafe request ids are replaced');
+ const outside=await raw('/admin');assert.equal(outside.status,404,'non-API paths 404 before auth');
+ assert.equal((await raw('/api/state',{method:'DELETE'})).status,405);
+ const big=await raw('/api/action',{method:'POST',headers:{Authorization:tokens.get('pilot-1')!,'Content-Type':'application/json'},body:JSON.stringify({action:'post',body:'x'.repeat(30000)})});assert.equal(big.status,413);assert.equal((await big.json() as any).code,'payload_too_large');
+ assert.equal((await raw('/api/action',{method:'POST',headers:{Authorization:tokens.get('pilot-1')!,'Content-Type':'text/plain'},body:'{}'})).status,415);
+ const unauth=await raw('/api/state');assert.equal(unauth.status,401);assert.equal(unauth.headers.get('WWW-Authenticate'),'Bearer');assert.equal((await unauth.json() as any).code,'unauthenticated');
+ assert.equal((await request('owner-subject','/api/account/transfer',{targetId:secondId,confirmation:'transfer'},400)).error,'Type TRANSFER OWNERSHIP to confirm.');
+ logs.length=0;(globalThis as any).__testEnv={DB:{prepare(){throw new Error('D1 exploded: secret-internal-detail')}},BUCKET:bucket};
+ const broken=await raw('/api/state',{headers:{Authorization:tokens.get('pilot-1')!}});(globalThis as any).__testEnv={DB:db,BUCKET:bucket};
+ assert.equal(broken.status,503);const brokenBody=await broken.json() as any;assert.equal(brokenBody.error,'The service is temporarily unavailable.');assert(!JSON.stringify(brokenBody).includes('secret-internal'),'internal errors never reach clients');
+ const logged=logs.find(l=>l.status===503)!;assert.equal(logged.level,'error');assert.match(logged.error||'',/D1 exploded/);assert.equal(logged.requestId,brokenBody.requestId);
+ assert(logs.every(l=>!JSON.stringify(l).includes('Bearer')),'tokens are never logged');
+ await raw('/api/media/abc-123',{headers:{Authorization:tokens.get('pilot-1')!}});assert.equal(logs.at(-1)!.path,'/api/media/:id','media ids are masked in logs');
+ assert.equal(errorCode(429),'rate_limited');assert.equal(errorCode(418),'error');
+ console.log('Mobile API integration passed: real SQLite migrations, signed RSA tokens, closed registration, trusted ownership, CORS, private posts/groups/media, guarded edits, one-time linking, idempotent messages, deletion cancellation/purge/tombstones, ownership transfer, error envelope/request ids/security headers/structured logs/body limits.');
 }finally{globalThis.fetch=originalFetch;sqlite.close()}

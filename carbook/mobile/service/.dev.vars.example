@@ -11,6 +11,8 @@ CORS_ORIGINS=
 AI_API_KEY=
 AI_BASE_URL=
 AI_MODEL=
+# Max assistant questions per member per UTC day (default 40). Caps provider cost per account.
+AI_DAILY_LIMIT=40
 # Optional Expo push access token, required only if "Enhanced push security" is enabled for the EAS project.
 EXPO_ACCESS_TOKEN=
 # Set to true to stop all remote push sends (in-app notifications still work).

@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import {DatabaseSync} from 'node:sqlite';
 import {readFileSync,readdirSync} from 'node:fs';
-import {handle,type MobileBindings} from '../service/worker';
+import {handle,setLogSink,type MobileBindings} from '../service/worker';
+setLogSink(()=>{});
 import {purgeDueAccounts} from '../service/accounts';
 const sqlite=new DatabaseSync(':memory:');sqlite.exec('PRAGMA foreign_keys=ON');
 for(const f of readdirSync('drizzle').filter(f=>f.endsWith('.sql')).sort())sqlite.exec(readFileSync('drizzle/'+f,'utf8').replaceAll('--> statement-breakpoint',''));
@@ -31,7 +32,7 @@ try{
  const prefs=(enabled:boolean)=>({action:'preferences',defaultAudience:'community',messagePolicy:'everyone',notificationsEnabled:enabled,showExamples:false});
  await action('pilot-1',prefs(true));await action('pilot-2',prefs(true));
  // Status and not-configured assistant
- assert.deepEqual(await request('pilot-1','/api/premium/status'),{assistant:false,push:true});
+ assert.deepEqual(await request('pilot-1','/api/premium/status'),{assistant:false,assistantDailyLimit:40,push:true});
  assert.match((await request('pilot-1','/api/assistant',{messages:[{role:'user',content:'Why do my brakes squeal?'}]},503)).error,/not configured/);
  // Push registration
  await request('pilot-1','/api/push/register',{token:'not-a-token'},400);await request('pilot-1','/api/push/register',{token:tok('seller-device'),platform:'android'});await request('pilot-2','/api/push/register',{token:tok('buyer-device')});await request('pilot-3','/api/push/register',{token:tok('shared-device')});
@@ -78,6 +79,12 @@ try{
  await request('pilot-2','/api/market/offer/respond',{offerId:offer.id,decision:'accept'});
  const offers=(await request('pilot-1','/api/market/offers?listingId='+listing.id)).offers;assert.equal(offers.length,1);assert.equal(offers[0].status,'accepted');assert.equal(offers[0].amount,8600000);
  await request('pilot-2','/api/market/offer',{listingId:listing.id,amount:1000},409);assert.equal((await request('pilot-3','/api/market/offers')).offers.length,0);
+ // Only one offer per listing can be accepted, and a closed negotiation cannot be re-opened by a third buyer
+ await request('pilot-3','/api/market/offer',{listingId:listing.id,amount:9000000},409);
+ const listing2=await action('pilot-1',{action:'listing',title:'Recaro seats pair',description:'Pair of Recaro bucket seats.',price:300000,currency:'PKR',category:'Parts',city:'Lahore'});
+ const o2=await request('pilot-2','/api/market/offer',{listingId:listing2.id,amount:250000}),o3=await request('pilot-3','/api/market/offer',{listingId:listing2.id,amount:260000});
+ await request('pilot-1','/api/market/offer/respond',{offerId:o3.id,decision:'accept'});assert.match((await request('pilot-1','/api/market/offer/respond',{offerId:o2.id,decision:'accept'},409)).error,/already accepted/);
+ await request('pilot-1','/api/market/offer/respond',{offerId:o3.id,decision:'decline'},409);
  await action('pilot-1',{action:'block',targetId:strangerId});await request('pilot-3','/api/market/offer',{listingId:listing.id,amount:5},404);
  await action('pilot-1',{action:'listingStatus',listingId:listing.id,status:'sold'});await request('pilot-2','/api/market/offer',{listingId:listing.id,amount:5},409);
 
@@ -107,11 +114,12 @@ try{
  const answer=await request('pilot-1','/api/assistant',{carId,messages:[{role:'user',content:'Brakes squeal when cold, normal?'}]});assert.match(answer.reply,/brake pads/);
  const call=aiCalls.at(-1)!;assert.equal(call.headers.Authorization,'Bearer test-key-not-real');assert.equal(call.body.model,'test-model');assert.match(call.body.messages[0].content,/not a substitute for a qualified mechanic/);assert.match(call.body.messages[0].content,/2019 Civic Type R/);
  aiMode='fail';const failed=await request('pilot-1','/api/assistant',{messages:[{role:'user',content:'Hi'}]},502);assert(!JSON.stringify(failed).includes('sk-secret'));
+ bindings={...bindings,AI_DAILY_LIMIT:'2'} as MobileBindings;aiMode='ok';const capped=await request('pilot-1','/api/assistant',{messages:[{role:'user',content:'One more?'}]},429);assert.match(capped.error,/today’s limit of 2/);assert.equal(capped.code,'rate_limited');bindings={...bindings,AI_DAILY_LIMIT:undefined} as unknown as MobileBindings;
  bindings={...bindings,AI_BASE_URL:'http://insecure.test'};assert.equal((await request('pilot-1','/api/premium/status')).assistant,false);
 
  // Account deletion purges premium data
  await action('pilot-2',{action:'car',name:'Buyer daily',year:2015,story:''});const buyerCar=(await request('pilot-2','/api/state')).cars.find((c:any)=>c.owner_id===buyerId).id;await request('pilot-2','/api/garage/record',{carId:buyerCar,kind:'expense',title:'Tyres',date:now,amount:40000});
  await request('pilot-2','/api/account/delete',{confirmation:'DELETE MY ACCOUNT'});await db.prepare('UPDATE deletion_requests SET execute_after=0 WHERE user_id=?').bind(buyerId).run();for(let i=0;i<5;i++)await purgeDueAccounts(bucket as any);
  for(const [table,col] of [['push_tokens','user_id'],['vehicle_records','owner_id'],['listing_offers','buyer_id'],['event_checkins','user_id']])assert.equal((await db.prepare(`SELECT COUNT(*) n FROM ${table} WHERE ${col}=?`).bind(buyerId).first() as any).n,0,table+' purged');
- console.log('Premium API passed: push registration/fan-out/preferences/generic DM text/dead-token pruning/cron sweep, owner-only garage records, offers and counter-offers with blocks, Carbook-only price insight, event pins and check-in windows, event update notifications, server-side AI assistant, deletion purge.');
+ console.log('Premium API passed: push registration/fan-out/preferences/generic DM text/dead-token pruning/cron sweep, owner-only garage records, offers and counter-offers with blocks, Carbook-only price insight, event pins and check-in windows, event update notifications, server-side AI assistant with daily cap, single accepted offer per listing, deletion purge.');
 }finally{globalThis.fetch=originalFetch;}
