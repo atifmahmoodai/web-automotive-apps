@@ -13,3 +13,6 @@ export function validateConfig(config:MobileConfig){
 export const rawConfig:MobileConfig={apiUrl:process.env.EXPO_PUBLIC_API_URL||'',issuer:process.env.EXPO_PUBLIC_OIDC_ISSUER||'',clientId:process.env.EXPO_PUBLIC_OIDC_CLIENT_ID||'',audience:process.env.EXPO_PUBLIC_OIDC_AUDIENCE||'',supportUrl:process.env.EXPO_PUBLIC_SUPPORT_URL||'',privacyUrl:process.env.EXPO_PUBLIC_PRIVACY_URL||'',termsUrl:process.env.EXPO_PUBLIC_TERMS_URL||''};
 export function getConfig(){return validateConfig(rawConfig)}
 export function configurationError(){try{getConfig();return null}catch(e){return e instanceof Error?e.message:'Service configuration is unavailable.'}}
+/** Public Carbook website (account linking, web-only tools). Override with EXPO_PUBLIC_WEB_URL. */
+export const WEBSITE_URL=(()=>{try{const u=new URL(process.env.EXPO_PUBLIC_WEB_URL||'https://astra-webapp-carbook.atifmahmood131.chatgpt.site');return u.protocol==='https:'?u.origin:null;}catch{return null;}})();
+export function websiteUrl(view?:string){return WEBSITE_URL?WEBSITE_URL+'/'+(view?'?view='+encodeURIComponent(view):''):null;}

@@ -13,7 +13,7 @@ Follow [Build from scratch, step by step](docs/BUILD_FROM_SCRATCH.md) for a clea
 
 ## What is included
 
-- A bright, high-contrast interface with 16 px body text, large headings, generous tap targets, keyboard handling and native tabs.
+- A bright, high-contrast interface (with a matching dark theme) with 16 px body text, large headings, generous tap targets, keyboard handling and native tabs.
 - Profile, cover photo, personal garage and vehicle editing.
 - Paginated feeds; photo/video posts; polls; five reactions; threaded comments; saved posts; reshares; stories and audience controls.
 - Friends, following, private communities, join approvals, events/RSVPs, marketplace listings and business/club pages.
@@ -23,7 +23,30 @@ Follow [Build from scratch, step by step](docs/BUILD_FROM_SCRATCH.md) for a clea
 - One-time linking to an existing website profile when both services use the same authorized database.
 - Data export and account deletion with a seven-day cancellation period, background media erasure, and owner transfer.
 
+### Premium features (0.2.0)
+
+- **Design system and dark mode:** tokens for colour, spacing, radius, type, elevation and motion. Light and dark palettes follow the system, with a System/Light/Dark switch in Settings. Includes Reanimated transitions, skeleton loaders, haptics, animated empty/error states and a five-step onboarding flow.
+- **Smart garage** (`/garage`): service history, a fuel log with full-tank L/100 km, km/L and cost-per-km, and expenses by category with a six-month spend chart. Document photos are private to the owner and carry expiry dates. Due items are ranked overdue/soon/later, and local reminders fire 7 days ahead and on the due morning.
+- **VIN decoder** (`/vin`): check-digit validation, then a decode through the free NHTSA vPIC API. The result can prefill a garage car or a marketplace listing. vPIC covers mainly US-market vehicles.
+- **Marketplace offers:** buyers make or update offers; sellers accept, decline or counter; buyers accept counters or withdraw. Each listing shows a price insight from comparable Carbook listings only, clearly labelled. It is not a market valuation.
+- **Meetups map** (`/map`) and event places: a keyless OpenStreetMap tile map. Organizers pin a meeting point by address search or coordinates. Members check in from two hours before the start until twelve hours after, and get one-tap directions to Apple/Google Maps (with a web fallback). The device location is never read.
+- **AI car assistant** (`/assistant`): chat through the mobile API using server-side `AI_API_KEY`/`AI_BASE_URL`/`AI_MODEL` (any OpenAI-compatible provider). The member can attach a car's details and recent records as context. It shows a "not configured" state and a safety disclaimer, and is not a substitute for a mechanic.
+- **Push notifications:** an expo-notifications permission flow, device token registration, and pushes for messages, reactions, comments, event updates and offers. Pushes honour the member's notification preference and blocks. A 15-minute sweep also pushes activity created on the website. Remote push needs `EAS_PROJECT_ID` at build time, which is **still empty**; local garage reminders work without it.
+
 See [FEATURES.md](docs/FEATURES.md) for the scope and explicit boundaries.
+
+### Production hardening (0.3.0)
+
+- **Resilient networking:** reads retry network errors and 429/502/503/504 with exponential backoff and jitter (honouring `Retry-After`); writes are never replayed, so a post or offer cannot be sent twice. An expired access token triggers one forced refresh and a retry. Every request carries `X-Request-Id` and `X-Client-Version`; server errors show the request id for support.
+- **Offline mode:** the last good account snapshot is cached on the device (14-day limit, cleared on sign-out). If Carbook cannot be reached at launch the member stays signed in, sees cached content and an offline banner with tap-to-retry.
+- **Session safety:** refresh tokens stay in the OS keystore; a revoked token signs the member out cleanly; sign-out unregisters push notifications before clearing the session. Android backups are disabled.
+- **Safe links:** only `http(s)` links without embedded credentials are opened; failures show an alert instead of a silent no-op.
+- **Optional telemetry:** `EXPO_PUBLIC_CRASH_REPORT_URL` / `EXPO_PUBLIC_ANALYTICS_URL` (HTTPS only, off when empty). Reports are scrubbed of tokens, emails and phone numbers. Fatal JS errors and unhandled promise rejections are reported when enabled.
+- **UX:** feed loading skeletons, empty and error states only when accurate, pull-to-refresh, accessibility roles on all tappable controls, real app version in Settings/Sign-in.
+- **API (Worker):** request ids, structured JSON logs (no tokens), consistent `{error, code, requestId}` envelopes, security headers, CORS allowlist, 24 KB JSON body limit, 415/405/404 handling, rate limits with `Retry-After`, a per-member daily AI cap (`AI_DAILY_LIMIT`, default 40), and race-safe offer acceptance (only one accepted offer per listing).
+- **Release build:** see "Local Android release APK" in [RELEASE.md](docs/RELEASE.md). Signing keys come from environment variables only.
+
+Not done yet: in-app translations (the UI is English-only), and store listings/screenshots.
 
 ## Stack
 

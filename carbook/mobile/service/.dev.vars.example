@@ -6,3 +6,14 @@ OWNER_SUBJECT=EXACT_VERIFIED_OWNER_SUBJECT
 REGISTRATION_OPEN=false
 ALLOWED_SUBJECTS=
 CORS_ORIGINS=
+# Optional AI car assistant (OpenAI-compatible /chat/completions). Server-side only; never use an EXPO_PUBLIC_ name.
+# When any of the three is empty the app shows "Assistant not configured". AI_BASE_URL must be https, e.g. https://api.example.com/v1
+AI_API_KEY=
+AI_BASE_URL=
+AI_MODEL=
+# Max assistant questions per member per UTC day (default 40). Caps provider cost per account.
+AI_DAILY_LIMIT=40
+# Optional Expo push access token, required only if "Enhanced push security" is enabled for the EAS project.
+EXPO_ACCESS_TOKEN=
+# Set to true to stop all remote push sends (in-app notifications still work).
+PUSH_DISABLED=false
