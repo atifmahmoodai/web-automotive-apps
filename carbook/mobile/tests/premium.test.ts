@@ -15,10 +15,10 @@ const config={issuer:'https://api-test.carbook.test/',audience:'https://mobile.c
 let bindings={DB:db,BUCKET:bucket,OIDC_ISSUER:config.issuer,OIDC_AUDIENCE:config.audience,OIDC_CLIENT_ID:config.clientId,OIDC_JWKS_URL:config.jwksUrl,OWNER_SUBJECT:'owner-subject',ALLOWED_SUBJECTS:'pilot-1,pilot-2,pilot-3',REGISTRATION_OPEN:'false',CORS_ORIGINS:'https://allowed.carbook.test'} as unknown as MobileBindings;
 const pair=await crypto.subtle.generateKey({name:'RSASSA-PKCS1-v1_5',modulusLength:2048,publicExponent:new Uint8Array([1,0,1]),hash:'SHA-256'},true,['sign','verify']);
 const jwk={...await crypto.subtle.exportKey('jwk',pair.publicKey),kid:'api-test-key',alg:'RS256',use:'sig'},originalFetch=globalThis.fetch;
-const pushes:any[]=[],aiCalls:{url:string;headers:Record<string,string>;body:any}[]=[];let aiMode:'ok'|'fail'='ok';
+const pushes:any[]=[],aiCalls:{url:string;headers:Record<string,string>;body:any}[]=[];let aiMode:'ok'|'fail'|'malformed'='ok';
 globalThis.fetch=async(input:any,init?:any)=>{const url=String(input);if(url===config.jwksUrl)return Response.json({keys:[jwk]});
  if(url==='https://exp.host/--/api/v2/push/send'){const batch=JSON.parse(init.body);pushes.push(...batch);return Response.json({data:batch.map((m:any)=>m.to.includes('DeadDevice')?{status:'error',details:{error:'DeviceNotRegistered'}}:{status:'ok',id:crypto.randomUUID()})});}
- if(url==='https://ai.carbook.test/v1/chat/completions'){aiCalls.push({url,headers:init.headers,body:JSON.parse(init.body)});return aiMode==='ok'?Response.json({choices:[{message:{content:'Check the brake pads. Not a substitute for a mechanic.'}}]}):new Response('provider failure sk-secret-should-not-leak',{status:500});}
+ if(url==='https://ai.carbook.test/v1/chat/completions'){aiCalls.push({url,headers:init.headers,body:JSON.parse(init.body)});return aiMode==='malformed'?Response.json({choices:[{message:{content:{text:'not a string'}}}]}):aiMode==='ok'?Response.json({choices:[{message:{content:'Check the brake pads. Not a substitute for a mechanic.'}}]}):new Response('provider failure sk-secret-should-not-leak',{status:500});}
  throw new Error('Unexpected fetch '+url);};
 const encode=(v:unknown)=>Buffer.from(JSON.stringify(v)).toString('base64url');
 async function token(sub:string){const now=Math.floor(Date.now()/1000),input=encode({alg:'RS256',kid:jwk.kid})+'.'+encode({iss:config.issuer,aud:config.audience,azp:config.clientId,sub,iat:now,exp:now+900,scope:'carbook',name:sub});const sig=await crypto.subtle.sign('RSASSA-PKCS1-v1_5',pair.privateKey,new TextEncoder().encode(input));return 'Bearer '+input+'.'+Buffer.from(sig).toString('base64url')}
@@ -85,6 +85,11 @@ try{
  const o2=await request('pilot-2','/api/market/offer',{listingId:listing2.id,amount:250000}),o3=await request('pilot-3','/api/market/offer',{listingId:listing2.id,amount:260000});
  await request('pilot-1','/api/market/offer/respond',{offerId:o3.id,decision:'accept'});assert.match((await request('pilot-1','/api/market/offer/respond',{offerId:o2.id,decision:'accept'},409)).error,/already accepted/);
  await request('pilot-1','/api/market/offer/respond',{offerId:o3.id,decision:'decline'},409);
+ // Race two different offer rows: exactly one acceptance must commit.
+ const raceListing=await action('pilot-1',{action:'listing',title:'Race guard test wheels',description:'Concurrent offer acceptance regression.',price:200000,currency:'PKR',category:'Parts',city:'Lahore'});
+ const raceA=await request('pilot-2','/api/market/offer',{listingId:raceListing.id,amount:100000}),raceB=await request('pilot-3','/api/market/offer',{listingId:raceListing.id,amount:110000});
+ const racing=await Promise.all([raceA,raceB].map(o=>handle(new Request('https://mobile.carbook.test/api/market/offer/respond',{method:'POST',headers:{Authorization:tokens.get('pilot-1')!,'Content-Type':'application/json'},body:JSON.stringify({offerId:o.id,decision:'accept'})}),bindings)));
+ assert.deepEqual(racing.map(r=>r.status).sort(),[200,409]);assert.equal((await db.prepare("SELECT COUNT(*) n FROM listing_offers WHERE listing_id=? AND status='accepted'").bind(raceListing.id).first() as any).n,1);
  await action('pilot-1',{action:'block',targetId:strangerId});await request('pilot-3','/api/market/offer',{listingId:listing.id,amount:5},404);
  await action('pilot-1',{action:'listingStatus',listingId:listing.id,status:'sold'});await request('pilot-2','/api/market/offer',{listingId:listing.id,amount:5},409);
 
@@ -105,6 +110,12 @@ try{
  await db.prepare('UPDATE meetups SET starts=? WHERE id=?').bind(now-3600000,ev.id).run();n=since();await request('pilot-2','/api/events/checkin',{eventId:ev.id});await request('pilot-2','/api/events/checkin',{eventId:ev.id});
  assert.equal(pushedTo(n,tok('seller-device')).length,1,'organizer told once');const ci=await request('pilot-2','/api/events/checkins?eventId='+ev.id);assert.equal(ci.count,1);assert.equal(ci.checkedIn,true);
  await request('pilot-3','/api/events/checkin',{eventId:ev.id},404);
+ // The attendee preview is capped at 50, but totals and own status cover all visible check-ins.
+ await db.prepare('UPDATE event_checkins SET created=0 WHERE event_id=? AND user_id=?').bind(ev.id,buyerId).run();
+ for(let i=0;i<55;i++){const extra='attendee-'+i;await db.prepare('INSERT INTO profiles(id,name,created) VALUES(?,?,?)').bind(extra,'Attendee '+i,now).run();await db.prepare('INSERT INTO event_checkins(event_id,user_id,created) VALUES(?,?,?)').bind(ev.id,extra,now+i).run();}
+ const many=await request('pilot-2','/api/events/checkins?eventId='+ev.id);assert.equal(many.count,56);assert.equal(many.members.length,50);assert.equal(many.checkedIn,true,'your check-in remains true outside the preview');
+ await db.prepare('DELETE FROM event_checkins WHERE user_id LIKE ?').bind('attendee-%').run();
+
  await db.prepare('UPDATE meetups SET starts=? WHERE id=?').bind(now-13*3600000,ev.id).run();await request('pilot-1','/api/events/checkin',{eventId:ev.id},409);
 
  // AI assistant: provider key stays server-side, car context only for own cars, errors never leak provider text
@@ -113,10 +124,15 @@ try{
  await request('pilot-1','/api/assistant',{messages:[{role:'assistant',content:'Hello'}]},400);
  const answer=await request('pilot-1','/api/assistant',{carId,messages:[{role:'user',content:'Brakes squeal when cold, normal?'}]});assert.match(answer.reply,/brake pads/);
  const call=aiCalls.at(-1)!;assert.equal(call.headers.Authorization,'Bearer test-key-not-real');assert.equal(call.body.model,'test-model');assert.match(call.body.messages[0].content,/not a substitute for a qualified mechanic/);assert.match(call.body.messages[0].content,/2019 Civic Type R/);
+ aiMode='malformed';await request('pilot-1','/api/assistant',{messages:[{role:'user',content:'Hi'}]},502);
  aiMode='fail';const failed=await request('pilot-1','/api/assistant',{messages:[{role:'user',content:'Hi'}]},502);assert(!JSON.stringify(failed).includes('sk-secret'));
  bindings={...bindings,AI_DAILY_LIMIT:'2'} as MobileBindings;aiMode='ok';const capped=await request('pilot-1','/api/assistant',{messages:[{role:'user',content:'One more?'}]},429);assert.match(capped.error,/today’s limit of 2/);assert.equal(capped.code,'rate_limited');bindings={...bindings,AI_DAILY_LIMIT:undefined} as unknown as MobileBindings;
  bindings={...bindings,AI_BASE_URL:'http://insecure.test'};assert.equal((await request('pilot-1','/api/premium/status')).assistant,false);
 
+ // Personal exports include native records/offers/check-ins, without another member's records.
+ const exported=await request('pilot-1','/api/read?resource=export');
+ assert.equal(exported.vehicle_records.length,2);assert(exported.listing_offers.some((o:any)=>o.id===offer.id));
+ const buyerExport=await request('pilot-2','/api/read?resource=export');assert.equal(buyerExport.vehicle_records.length,0);assert.equal(buyerExport.event_checkins.length,1);
  // Account deletion purges premium data
  await action('pilot-2',{action:'car',name:'Buyer daily',year:2015,story:''});const buyerCar=(await request('pilot-2','/api/state')).cars.find((c:any)=>c.owner_id===buyerId).id;await request('pilot-2','/api/garage/record',{carId:buyerCar,kind:'expense',title:'Tyres',date:now,amount:40000});
  await request('pilot-2','/api/account/delete',{confirmation:'DELETE MY ACCOUNT'});await db.prepare('UPDATE deletion_requests SET execute_after=0 WHERE user_id=?').bind(buyerId).run();for(let i=0;i<5;i++)await purgeDueAccounts(bucket as any);

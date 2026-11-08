@@ -18,7 +18,7 @@ export async function enablePush(client:CarbookClient):Promise<PushResult>{if(!(
  catch(e){return {ok:false,reason:e instanceof Error&&e.message.length<160?e.message:'Could not register this device for push.'}}}
 export async function disablePush(client:CarbookClient){const token=await readPref('push');await writePref('push','off');if(token&&token!=='off')await client.request('/api/push/unregister',{method:'POST',body:JSON.stringify({token})}).catch(()=>{});}
 /** Sign-out: remove this device's token from the account (while the session is still valid) and forget the opt-in so the next member on this device starts with push off. */
-export async function disablePushForSignOut(client:CarbookClient){const token=await readPref('push');await writePref('push',null);if(token&&token!=='off')await client.request('/api/push/unregister',{method:'POST',body:JSON.stringify({token})},5000).catch(()=>{});}
+export async function disablePushForSignOut(client:CarbookClient){const token=await readPref('push');await writePref('push',null);await clearGarageReminders();if(token&&token!=='off')await client.request('/api/push/unregister',{method:'POST',body:JSON.stringify({token})},5000).catch(()=>{});}
 /** Re-register silently on launch when the member opted in earlier and permission is still granted. */
 export async function syncPush(client:CarbookClient){const pref=await readPref('push');if(!pref||pref==='off')return;if(await permissionStatus()!=='granted')return;await enablePush(client).catch(()=>{});}
 export async function pushEnabled(){const p=await readPref('push');return !!p&&p!=='off'}
@@ -27,3 +27,11 @@ export async function scheduleLocal(items:{id:string;at:number;title:string;body
  for(const n of existing)if(n.identifier.startsWith(prefix)&&!want.has(n.identifier))await Notifications.cancelScheduledNotificationAsync(n.identifier).catch(()=>{});
  if((await permissionStatus())!=='granted')return 0;let count=0;
  for(const i of items){await Notifications.scheduleNotificationAsync({identifier:i.id,content:{title:i.title,body:i.body,data:{route:i.route}},trigger:{type:Notifications.SchedulableTriggerInputTypes.DATE,date:new Date(i.at),channelId:'default'}}).then(()=>count++).catch(()=>{})}return count;}
+
+/** Private vehicle names and document titles must not appear after the account signs out. */
+export async function clearGarageReminders(){
+ const scheduled=await Notifications.getAllScheduledNotificationsAsync().catch(()=>[] as Notifications.NotificationRequest[]);
+ await Promise.all(scheduled.filter(n=>n.identifier.startsWith('garage-')).map(n=>Notifications.cancelScheduledNotificationAsync(n.identifier).catch(()=>{})));
+ const delivered=await Notifications.getPresentedNotificationsAsync().catch(()=>[] as Notifications.Notification[]);
+ await Promise.all(delivered.filter(n=>n.request.identifier.startsWith('garage-')).map(n=>Notifications.dismissNotificationAsync(n.request.identifier).catch(()=>{})));
+}

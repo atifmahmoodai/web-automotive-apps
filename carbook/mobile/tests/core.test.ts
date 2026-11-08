@@ -7,7 +7,7 @@ import {validateVin,checkDigit,parseVpic,normalizeVin,vinTitle} from '../src/cor
 import {fuelStats,categoryTotals,dueItems,reminderPlan,parseDay,dayString,monthlySpend,type VehicleRecord} from '../src/core/garage';
 import {tileTemplate,geocoderBase,project,unproject,tileUrl,directionsUrls,parseCoords,fitBounds,DEFAULT_TILES,geocode} from '../src/core/geo';
 import {notificationRoute} from '../src/core/routes';
-import {parseAmount} from '../src/core/premium';
+import {parseAmount,assistantHistory} from '../src/core/premium';
 import {safeExternalUrl,optionalHttps} from '../src/core/urls';
 import {scrub,crashReport,analyticsEvent} from '../src/core/telemetry-core';
 import {parseSnapshot,SNAPSHOT_MAX_AGE} from '../src/core/snapshot';
@@ -29,6 +29,12 @@ await test('network failures never replay a potentially committed mutation',asyn
 await test('JSON API errors and proxy HTML responses remain clear',async()=>{
  const c=new CarbookClient('https://api.carbook.test',async()=>'token',async()=>Response.json({error:'Private content.'},{status:403}));await assert.rejects(c.read('feed'),(e:any)=>e.status===403&&e.message==='Private content.');
  const broken=new CarbookClient('https://api.carbook.test',async()=>'token',async()=>new Response('<html>login</html>',{status:200,headers:{'Content-Type':'text/html'}}));await assert.rejects(broken.read('feed'),ApiError);
+});
+await test('malformed successful mutations remain uncertain and are never replayed',async()=>{
+ for(const response of [()=>new Response('<html>proxy</html>',{headers:{'Content-Type':'text/html'}}),()=>Response.json(null),()=>Response.json([]),()=>Response.json(42)]){
+  let calls=0;const c=new CarbookClient('https://api.carbook.test',async()=>'t',async()=>{calls++;return response()});
+  await assert.rejects(c.action({action:'post'}),(e:any)=>e instanceof ApiError&&e.uncertain);assert.equal(calls,1);
+ }
 });
 await test('timeouts cancel reads without inventing an empty result',async()=>{
  let attempts=0;const c=new CarbookClient('https://api.carbook.test',async()=>'token',async(_url,options)=>{attempts++;return new Promise((_resolve,reject)=>options?.signal?.addEventListener('abort',()=>reject(new Error('abort'))))},{sleep:async()=>{}});
@@ -120,8 +126,13 @@ await test('crash reports and analytics are scrubbed of tokens and personal data
  assert.equal(analyticsEvent('Bad Name'),null);assert.deepEqual(analyticsEvent('post_created',{media:true,count:2,body:{nested:1},Email:'x',note:'mail bob@x.io'}),{name:'post_created',props:{media:true,count:2,note:'mail [email]'}});
 });
 await test('offline snapshots are validated and expire',()=>{
- const now=Date.now(),data={userId:'u1',profiles:[]};
+ const now=Date.now(),data={userId:'u1',...Object.fromEntries(['moderation','profiles','posts','comments','cars','following','memberships','rsvps','notifications','blocked','friendships','circles','events','stories','listings','pages','conversations','reports','audit'].map(k=>[k,[]]))};
  assert.equal(parseSnapshot(JSON.stringify({savedAt:now-1000,data}),now)?.data.userId,'u1');
+ assert.equal(parseSnapshot(JSON.stringify({savedAt:now,data:{userId:'u1',profiles:[]}}),now),null,'partial cache must not crash screens');
  for(const bad of ['nope','{}',JSON.stringify({savedAt:now,data:{profiles:[]}}),JSON.stringify({savedAt:now-SNAPSHOT_MAX_AGE-1,data}),JSON.stringify({savedAt:now+3600000,data})])assert.equal(parseSnapshot(bad,now),null);
+});
+await test('long assistant replies do not break follow-up questions',()=>{
+ const history=Array.from({length:20},(_,i)=>({role:i%2?'user' as const:'assistant' as const,content:'x'.repeat(8000)}));
+ const bounded=assistantHistory(history);assert.equal(bounded.length,12);assert(bounded.every(m=>m.content.length===1500));assert.equal(history[0]!.content.length,8000);
 });
 console.log(`${checks} mobile core checks passed.`);

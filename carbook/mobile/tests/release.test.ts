@@ -1,0 +1,13 @@
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+import {runInNewContext} from 'node:vm';
+const state={manifest:{'uses-feature':[] as any[]},properties:[] as any[],gradle:{language:'groovy',contents:'android {\n    packagingOptions {\n    }\n}'}};
+const mod=(key:'manifest'|'properties'|'gradle')=>(config:any,apply:any)=>{const result=apply({modResults:key==='manifest'?{manifest:state.manifest}:state[key]});if(key==='gradle')state.gradle=result.modResults;return config;};
+const module={exports:null as any};
+runInNewContext(readFileSync('mobile/plugins/with-android-release.js','utf8'),{module,process:{env:{}},require:(name:string)=>{assert.equal(name,'@expo/config-plugins');return {withAndroidManifest:mod('manifest'),withGradleProperties:mod('properties'),withAppBuildGradle:mod('gradle')}}});
+module.exports({});module.exports({});
+assert.equal(state.manifest['uses-feature'].length,1);assert.equal(state.manifest['uses-feature'][0].$['android:required'],'false');
+for(const [key,value] of Object.entries({reactNativeArchitectures:'arm64-v8a',hermesEnabled:'true','android.enableMinifyInReleaseBuilds':'true','android.enableShrinkResourcesInReleaseBuilds':'true','expo.useLegacyPackaging':'true','org.gradle.workers.max':'3'}))assert.equal(state.properties.find(p=>p.key===key)?.value,value,key);
+assert.equal((state.gradle.contents.match(/\/\/ carbook-release-signing/g)||[]).length,1);assert(state.gradle.contents.includes("System.getenv('CARBOOK_UPLOAD_STORE_FILE')"));
+assert(readFileSync('mobile/app.config.ts','utf8').includes("blockedPermissions:['android.permission.SYSTEM_ALERT_WINDOW'"));
+console.log('Release config passed: idempotent optional-camera manifest, persisted slim settings, env-based signing and blocked overlay permission.');

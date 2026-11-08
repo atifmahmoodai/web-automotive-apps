@@ -66,7 +66,8 @@ async function makeOffer(input:unknown,uid:string){const a=parse(offerSchema,inp
  await memberAccessible(l.seller_id,uid);await rateLimit(uid,'offers',10);
  if(await db.prepare("SELECT 1 FROM listing_offers WHERE listing_id=? AND status='accepted' AND buyer_id!=?").bind(l.id,uid).first())throw new ApiError('The seller has already accepted another offer.',409);
  const existing=await db.prepare('SELECT id,status FROM listing_offers WHERE listing_id=? AND buyer_id=?').bind(l.id,uid).first<{id:string;status:string}>();if(existing?.status==='accepted')throw new ApiError('Your offer was already accepted. Message the seller to arrange the sale.',409);
- const oid=existing?.id||uuid();await db.prepare("INSERT INTO listing_offers(id,listing_id,buyer_id,seller_id,amount,counter,currency,message,status,created,updated) VALUES(?,?,?,?,?,NULL,?,?,'pending',?,?) ON CONFLICT(listing_id,buyer_id) DO UPDATE SET amount=excluded.amount,counter=NULL,message=excluded.message,status='pending',updated=excluded.updated").bind(oid,l.id,uid,l.seller_id,a.amount,l.currency,a.message,now,now).run();
+ const oid=existing?.id||uuid();const changed=await db.prepare("INSERT INTO listing_offers(id,listing_id,buyer_id,seller_id,amount,counter,currency,message,status,created,updated) VALUES(?,?,?,?,?,NULL,?,?,'pending',?,?) ON CONFLICT(listing_id,buyer_id) DO UPDATE SET amount=excluded.amount,counter=NULL,message=excluded.message,status='pending',updated=excluded.updated WHERE listing_offers.status!='accepted'").bind(oid,l.id,uid,l.seller_id,a.amount,l.currency,a.message,now,now).run();
+ if(!changed.meta?.changes)throw new ApiError('Your offer was already accepted. Refresh to see the latest status.',409);
  await notify(l.seller_id,uid,null,`made an offer of ${l.currency} ${a.amount.toLocaleString('en-US')} on “${short(l.title)}”`);return {ok:true,id:oid};}
 async function respondOffer(input:unknown,uid:string){const a=parse(respondSchema,input),db=database(),now=Date.now();
  const o=await db.prepare('SELECT o.*,l.title,l.status listing_status FROM listing_offers o JOIN listings l ON l.id=o.listing_id WHERE o.id=?').bind(a.offerId).first<any>();if(!o||(o.buyer_id!==uid&&o.seller_id!==uid))throw new ApiError('Offer unavailable.',404);
@@ -79,8 +80,8 @@ async function respondOffer(input:unknown,uid:string){const a=parse(respondSchem
  else if(a.decision==='counter'){if(!seller)throw new ApiError('Make a new offer to change your amount.',403);if(o.status!=='pending')throw new ApiError('Wait for the buyer to respond to your counter-offer.',409);if(!a.amount||a.amount===o.amount)throw new ApiError('Enter a different counter-offer amount.');status='countered';counter=a.amount;message=`countered with ${o.currency} ${a.amount.toLocaleString('en-US')} on “${short(o.title)}”`;}
  else{if(seller?o.status!=='pending':o.status!=='countered')throw new ApiError(seller?'The buyer must respond to your counter-offer.':'There is no counter-offer to accept.',409);status='accepted';if(!seller)amount=o.counter;message=`accepted the offer of ${o.currency} ${Number(amount).toLocaleString('en-US')} on “${short(o.title)}”`;}
  if(status==='accepted'&&await db.prepare("SELECT 1 FROM listing_offers WHERE listing_id=? AND status='accepted' AND id!=?").bind(o.listing_id,o.id).first())throw new ApiError('Another offer on this listing was already accepted.',409);
- // Conditional update: a concurrent response (double tap, second device) must not notify twice or overwrite the newer state.
- const changed=await db.prepare('UPDATE listing_offers SET status=?,amount=?,counter=?,updated=? WHERE id=? AND status=? AND updated=?').bind(status,amount,counter,now,o.id,o.status,o.updated).run();if(!changed.meta?.changes)throw new ApiError('This offer changed. Refresh and try again.',409);
+ // Atomic listing-wide acceptance guard: per-offer version checks alone cannot prevent two different buyers winning concurrently.
+ const changed=await db.prepare("UPDATE listing_offers SET status=?,amount=?,counter=?,updated=? WHERE id=? AND status=? AND updated=? AND (?!='accepted' OR NOT EXISTS(SELECT 1 FROM listing_offers accepted WHERE accepted.listing_id=? AND accepted.status='accepted' AND accepted.id!=?)) AND (? NOT IN('accepted','countered') OR EXISTS(SELECT 1 FROM listings WHERE id=? AND status='active'))").bind(status,amount,counter,now,o.id,o.status,o.updated,status,o.listing_id,o.id,status,o.listing_id).run();if(!changed.meta?.changes)throw new ApiError('This offer changed. Refresh and try again.',409);
  await notify(peer,uid,null,message);return {ok:true,status};}
 async function listOffers(url:URL,uid:string){const listingId=url.searchParams.get('listingId');
  const rows=(await database().prepare(WITH+`SELECT o.id,o.listing_id,o.buyer_id,o.seller_id,o.amount,o.counter,o.currency,o.message,o.status,o.created,o.updated,l.title,l.price,l.image,l.status listing_status,b.name buyer_name,s.name seller_name FROM listing_offers o JOIN listings l ON l.id=o.listing_id JOIN profiles b ON b.id=o.buyer_id JOIN profiles s ON s.id=o.seller_id
@@ -116,8 +117,10 @@ async function places(uid:string){const rows=(await database().prepare(WITH+`SEL
  return {places:rows.map(r=>({...r,checked_in:!!r.checked_in}))};}
 async function eventCheckins(url:URL,uid:string){const e=await visibleEvent(url.searchParams.get('eventId')||'',uid),db=database();
  const place=await db.prepare('SELECT lat,lng FROM event_places WHERE event_id=?').bind(e.id).first();
+ // Attendance totals and your status must not depend on the first 50 visible members.
+ const summary=await db.prepare(WITH+`SELECT COUNT(*) count,COALESCE(MAX(CASE WHEN p.id=(SELECT id FROM viewer) THEN 1 ELSE 0 END),0) checked_in FROM event_checkins c JOIN profiles p ON p.id=c.user_id WHERE c.event_id=? AND (p.id=(SELECT id FROM viewer) OR ${activeOwner('p.id')})`).bind(uid,e.id).first<{count:number;checked_in:number}>();
  const rows=(await db.prepare(WITH+`SELECT p.id,p.name,p.avatar FROM event_checkins c JOIN profiles p ON p.id=c.user_id WHERE c.event_id=? AND (p.id=(SELECT id FROM viewer) OR ${activeOwner('p.id')}) ORDER BY c.created DESC LIMIT 50`).bind(uid,e.id).all()).results as {id:string}[];
- return {eventId:e.id,place,count:rows.length,checkedIn:rows.some(r=>r.id===uid),members:rows,opensAt:e.starts-CHECKIN_BEFORE,closesAt:e.starts+CHECKIN_AFTER};}
+ return {eventId:e.id,place,count:summary?.count||0,checkedIn:!!summary?.checked_in,members:rows,opensAt:e.starts-CHECKIN_BEFORE,closesAt:e.starts+CHECKIN_AFTER};}
 
 // ---------- AI assistant ----------
 const assistantSchema=z.object({carId:id.optional(),messages:z.array(z.object({role:z.enum(['user','assistant']),content:z.string().trim().min(1).max(1500)})).min(1).max(12)});
@@ -129,7 +132,7 @@ async function assistant(input:unknown,uid:string,env:PremiumEnv){if(!assistantC
   context=`The member's car: ${car.year} ${car.name}.${car.story?` Owner notes: ${car.story.slice(0,400)}`:''}${recent.length?` Recent records: ${recent.map(r=>`${new Date(r.date).toISOString().slice(0,10)} ${r.kind} ${r.title}${r.odometer!=null?` at ${r.odometer} km`:''}`).join('; ')}.`:''}`;}
  let res:Response;try{res=await fetch(env.AI_BASE_URL!.replace(/\/+$/,'')+'/chat/completions',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+env.AI_API_KEY},body:JSON.stringify({model:env.AI_MODEL,temperature:0.3,max_tokens:700,messages:[{role:'system',content:ASSISTANT_RULES+(context?'\n'+context:'')},...a.messages]}),signal:AbortSignal.timeout(30000)});}catch{throw new ApiError('The car assistant is unavailable right now. Try again shortly.',502);}
  if(!res.ok)throw new ApiError(res.status===429?'The car assistant is busy. Try again in a minute.':'The car assistant is unavailable right now. Try again shortly.',502);
- const body=await res.json().catch(()=>null) as {choices?:{message?:{content?:string}}[]}|null,reply=body?.choices?.[0]?.message?.content?.trim();if(!reply)throw new ApiError('The car assistant returned no answer. Try rephrasing.',502);
+ const body=await res.json().catch(()=>null) as {choices?:{message?:{content?:unknown}}[]}|null,content=body?.choices?.[0]?.message?.content,reply=typeof content==='string'?content.trim():'';if(!reply)throw new ApiError('The car assistant returned no answer. Try rephrasing.',502);
  return {reply:reply.slice(0,8000)};}
 
 // ---------- Routing ----------

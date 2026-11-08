@@ -3,7 +3,7 @@
 // - Release signing from environment variables. Keystores and passwords are never committed;
 //   when the variables are absent the release build falls back to the debug key and is NOT
 //   suitable for Play upload (Gradle prints a warning).
-const {withGradleProperties, withAppBuildGradle} = require('@expo/config-plugins');
+const {withGradleProperties, withAppBuildGradle, withAndroidManifest} = require('@expo/config-plugins');
 
 const PROPS = {
   'org.gradle.jvmargs': '-Xmx3072m -XX:MaxMetaspaceSize=768m',
@@ -34,6 +34,15 @@ const SIGNING = `
 `;
 
 module.exports = function withAndroidRelease(config) {
+  config = withAndroidManifest(config, cfg => {
+    // Taking a photo is optional: do not exclude camera-less devices from the store.
+    const manifest = cfg.modResults.manifest;
+    const features = manifest['uses-feature'] || (manifest['uses-feature'] = []);
+    let camera = features.find(f => f.$?.['android:name'] === 'android.hardware.camera');
+    if (!camera) { camera = {$: {'android:name': 'android.hardware.camera'}}; features.push(camera); }
+    camera.$['android:required'] = 'false';
+    return cfg;
+  });
   config = withGradleProperties(config, cfg => {
     for (const [key, value] of Object.entries(PROPS)) {
       const existing = cfg.modResults.find(item => item.type === 'property' && item.key === key);

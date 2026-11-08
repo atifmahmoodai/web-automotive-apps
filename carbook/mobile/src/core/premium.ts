@@ -19,6 +19,9 @@ export const premium={
  checkins:(c:CarbookClient,eventId:string)=>c.request<Checkins>('/api/events/checkins?'+new URLSearchParams({eventId})),
  setPlace:(c:CarbookClient,eventId:string,lat:number|null,lng:number|null)=>post(c,'/api/events/place',{eventId,lat,lng}),
  checkIn:(c:CarbookClient,eventId:string)=>post(c,'/api/events/checkin',{eventId}),
- ask:(c:CarbookClient,messages:ChatMessage[],carId?:string)=>post<{reply:string}>(c,'/api/assistant',{messages,carId},45000),
+ ask:(c:CarbookClient,messages:ChatMessage[],carId?:string)=>post<{reply:string}>(c,'/api/assistant',{messages:assistantHistory(messages),carId},45000),
 };
 export const parseAmount=(v:string)=>{const n=Number(v.replace(/[,\s]/g,''));return Number.isInteger(n)&&n>0?n:null};
+
+/** Keep UI replies intact, but bound every history turn to the API input contract. */
+export function assistantHistory(messages:ChatMessage[]):ChatMessage[]{return messages.slice(-12).map(m=>({role:m.role,content:m.content.trim().slice(0,1500)}));}

@@ -36,9 +36,9 @@ export class CarbookClient{
     // The API rejects bad tokens before doing any work, so one forced-refresh retry is safe for writes too.
     if(response.status===401&&!forced){forced=true;attempt--;continue;}
     const content=response.headers.get('content-type')||'';
-    if(!content.includes('application/json'))throw new ApiError(response.status>=500?'Carbook is having trouble right now. Try again in a moment.':'The service returned an unexpected response.',response.status,false,serverId);
+    if(!content.includes('application/json'))throw new ApiError(response.status>=500?'Carbook is having trouble right now. Try again in a moment.':'The service returned an unexpected response.',response.status,write&&response.ok,serverId);
     let result:T&{error?:string};
-    try{result=await response.json() as T&{error?:string};}catch{throw new ApiError(write?'We could not confirm the change. Check your content before trying again.':'The service returned an unexpected response.',response.status,write&&response.ok,serverId);}
+    try{result=await response.json() as T&{error?:string};if(!result||typeof result!=='object'||Array.isArray(result))throw new Error('Invalid response shape');}catch{throw new ApiError(write?'We could not confirm the change. Check your content before trying again.':'The service returned an unexpected response.',response.status,write&&response.ok,serverId);}
     if(!response.ok)throw new ApiError(result.error||(response.status>=500?'Carbook is having trouble right now. Try again in a moment.':'The request could not be completed.'),response.status,false,serverId);
     return result;
    }finally{clearTimeout(timer)}

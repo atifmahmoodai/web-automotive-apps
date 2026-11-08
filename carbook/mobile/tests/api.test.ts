@@ -42,7 +42,13 @@ try{
  await request('second-stranger','/api/account/link',{code:link.code},400);
  const expired=await createMobileLink('website-person');await db.prepare('UPDATE mobile_link_codes SET expires=0 WHERE hash=?').bind(await hashLink(expired.code)).run();await request('second-stranger','/api/account/link',{code:expired.code},400);
  const occupied=await createMobileLink('website-person');await request('pilot-1','/api/account/link',{code:occupied.code},409);
- await request('pilot-3','/api/state');await request('pilot-3','/api/account/link',{code:occupied.code});assert.equal((await request('pilot-3','/api/state')).userId,'website-person');
+ const third=(await request('pilot-3','/api/state')).userId;
+ // Native check-ins are real account content too: linking must not orphan them.
+ await db.prepare("INSERT INTO meetups(id,title,description,city,location,starts,capacity,created) VALUES('link-event','Link test','Test event','Lahore','Park',?,10,?)").bind(Date.now(),Date.now()).run();
+ await db.prepare("INSERT INTO event_checkins(event_id,user_id,created) VALUES('link-event',?,?)").bind(third,Date.now()).run();
+ await request('pilot-3','/api/account/link',{code:occupied.code},409);
+ await db.prepare('DELETE FROM event_checkins WHERE user_id=?').bind(third).run();
+ await request('pilot-3','/api/account/link',{code:occupied.code});assert.equal((await request('pilot-3','/api/state')).userId,'website-person');
  const car=await action('pilot-1',{action:'car',name:'Test Car',year:2025,story:'My personal car',image:null});
  const group=await action('pilot-1',{action:'group',name:'Private Garage',description:'A private community for testing.',privacy:'private',rules:'Be respectful.',color:'forest'});
  await action('pilot-1',{action:'post',body:'Private group post',topic:'Ownership stories',groupId:group.id});assert.equal((await request('pilot-2','/api/read?resource=feed&group='+group.id)).posts.length,0);await request('pilot-2','/api/read?resource=groupMembers&id='+group.id,undefined,403);
