@@ -132,6 +132,25 @@ The Android production profile requests an AAB. Configure Apple Developer signin
 
 Use the authenticated EAS build dashboard to retrieve artifacts and record build IDs, source SHA, dependency lock hash, environment and release notes. No such build IDs/artifacts exist for this delivery.
 
+### Local Android release APK (no EAS)
+
+`plugins/with-android-release.js` is applied on every `expo prebuild` and writes the release settings into the generated (gitignored) `android/` project: arm64-v8a only (`CARBOOK_ANDROID_ABIS` overrides, e.g. `arm64-v8a,armeabi-v7a`), Hermes, R8 minify, resource shrinking, `expo.useLegacyPackaging=true`, 3 Gradle workers and a 3 GB heap.
+
+Release signing is read **only from environment variables**. Create the upload key once, keep it outside the repository and back it up (losing it blocks Play updates unless Play App Signing key reset is used):
+
+```sh
+keytool -genkeypair -v -storetype PKCS12 -keystore ~/keys/carbook-upload.p12 -alias carbook-upload -keyalg RSA -keysize 4096 -validity 10000
+export CARBOOK_UPLOAD_STORE_FILE=$HOME/keys/carbook-upload.p12
+export CARBOOK_UPLOAD_STORE_PASSWORD=...   # from your password manager / CI secret
+export CARBOOK_UPLOAD_KEY_ALIAS=carbook-upload
+export CARBOOK_UPLOAD_KEY_PASSWORD=...
+npx expo prebuild --platform android --clean --no-install
+cd android && ./gradlew assembleRelease   # or bundleRelease for a Play AAB
+```
+
+When any `CARBOOK_UPLOAD_*` variable is missing, Gradle prints a warning and signs the release with the **debug key**. Such an APK is for sideload testing only and can never be uploaded to Google Play. Keep `android/app/build/outputs/mapping/release/mapping.txt` for every shipped build (upload it to Play Console) so crash stack traces can be de-obfuscated. Bump `version` and `android.versionCode` in `app.config.ts` for every store upload.
+
+
 ## 7. Device acceptance gate
 
 Run with at least two real test accounts on a physical iPhone and Android device, plus a small phone and a tablet/simulator:
