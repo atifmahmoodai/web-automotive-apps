@@ -1,6 +1,8 @@
 # Coolify: Build Pack "Docker Compose", Base Directory /carbook,
 # Docker Compose Location /docker-compose.yml.
-# Give ONLY the `auth` service a domain (https://analysight.com:4180).
+# Give ONLY the `auth` service domains:
+#   https://analysight.com:4180,https://www.analysight.com:4180
+# www is redirected (301) to the apex by the Traefik middleware below.
 services:
   carbook:
     build:
@@ -25,6 +27,12 @@ services:
   auth:
     image: quay.io/oauth2-proxy/oauth2-proxy:v7.15.6
     restart: unless-stopped
+    labels:
+      # Canonical host: www.analysight.com -> analysight.com (Coolify-documented pattern).
+      - "traefik.http.middlewares.carbook-to-apex.redirectregex.regex=^(http|https)://www\\.(.+)"
+      - "traefik.http.middlewares.carbook-to-apex.redirectregex.replacement=$${1}://$${2}"
+      - "traefik.http.middlewares.carbook-to-apex.redirectregex.permanent=true"
+      - "coolify.traefik.middlewares=carbook-to-apex"
     depends_on:
       - carbook
     expose:
@@ -32,7 +40,7 @@ services:
     environment:
       OAUTH2_PROXY_HTTP_ADDRESS: 0.0.0.0:4180
       OAUTH2_PROXY_UPSTREAMS: http://carbook:8787/
-      OAUTH2_PROXY_PROVIDER: ${OAUTH2_PROXY_PROVIDER:-github}
+      OAUTH2_PROXY_PROVIDER: github
       OAUTH2_PROXY_CLIENT_ID: ${OAUTH2_PROXY_CLIENT_ID:?set in Coolify}
       OAUTH2_PROXY_CLIENT_SECRET: ${OAUTH2_PROXY_CLIENT_SECRET:?set in Coolify}
       OAUTH2_PROXY_COOKIE_SECRET: ${OAUTH2_PROXY_COOKIE_SECRET:?set in Coolify}
@@ -43,8 +51,8 @@ services:
       OAUTH2_PROXY_PASS_USER_HEADERS: "true"
       OAUTH2_PROXY_PASS_HOST_HEADER: "true"
       OAUTH2_PROXY_SKIP_PROVIDER_BUTTON: "true"
-      # Who may sign in. GitHub: comma-separated usernames. Leave email domains "*".
-      OAUTH2_PROXY_GITHUB_USERS: ${OAUTH2_PROXY_GITHUB_USERS:-}
+      # Who may sign in: comma-separated GitHub usernames. Keep email domains "*".
+      OAUTH2_PROXY_GITHUB_USERS: ${OAUTH2_PROXY_GITHUB_USERS:-atifmahmoodai}
       OAUTH2_PROXY_EMAIL_DOMAINS: ${OAUTH2_PROXY_EMAIL_DOMAINS:-*}
 
 volumes:
